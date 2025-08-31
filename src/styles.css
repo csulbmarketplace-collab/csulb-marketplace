@@ -30,7 +30,7 @@ body{
 /* Layout helpers */
 .container{max-width:1200px;margin:0 auto;padding:0 16px}
 .section{padding:clamp(28px,6vh,80px) 0}
-.mt-12{margin-top:12px}.mt-16{margin-top:16px}.mt-24{margin-top:24px}
+.mt-8{margin-top:8px}.mt-12{margin-top:12px}.mt-16{margin-top:16px}.mt-24{margin-top:24px}
 .center{text-align:center}
 
 .hide-mobile{display:initial}
@@ -51,12 +51,20 @@ body{
   display:flex; align-items:center; justify-content:space-between; gap:12px;
   height:64px;
 }
-.brand{display:flex; align-items:center; gap:10px; font-weight:900; letter-spacing:.2px; color:var(--text);}
+
+/* Brand: no button look, white text, triangle badge */
+.brand{
+  display:flex; align-items:center; gap:10px; font-weight:900; letter-spacing:.2px; color:var(--text);
+  background:transparent; border:none; padding:0; cursor:pointer; font-size:16px;
+}
 .brand-badge{
   width:40px;height:40px;border-radius:12px;display:grid;place-items:center;
   background:linear-gradient(135deg, var(--grad1), var(--grad2)); color:#0b1022;
-  border:1px solid rgba(255,255,255,.25); font-size:18px;
+  border:1px solid rgba(255,255,255,.25); font-size:18px; font-weight:900;
 }
+.brand-badge span{transform:translateY(-1px)} /* ▲ sits nicer */
+
+/* Nav actions */
 .nav-actions{display:flex; gap:10px}
 .nav-actions .btn{padding:10px 14px}
 
@@ -155,6 +163,18 @@ body{
 }
 .input::placeholder{color:#8ea0c6}
 
+/* Modal (New Listing) */
+.modal-backdrop{
+  position:fixed; inset:0; display:grid; place-items:center; z-index:60;
+  background:rgba(7,10,20,.55); backdrop-filter: blur(6px);
+}
+.modal{
+  width:min(680px, 92vw); padding:18px; border-radius:16px;
+  background:var(--card); border:1px solid var(--border);
+}
+.modal-grid{display:grid; gap:10px; grid-template-columns:1fr 1fr}
+@media (max-width:720px){ .modal-grid{grid-template-columns:1fr} }
+
 /* Footer */
 .footer{
   padding:28px 0 36px; margin-top:40px; border-top:1px solid var(--border);
@@ -163,7 +183,7 @@ body{
 .footer a{color:#cfd8ff; text-decoration:none}
 .footer a:hover{text-decoration:underline}
 
-/* Mobile sticky CTA (ONLY on explore/home when logged out) */
+/* Mobile sticky CTA */
 .stickyCta{
   position:sticky; bottom:0; z-index:25; padding:12px 0;
   background: linear-gradient(180deg, transparent, rgba(10,16,32,.9));
