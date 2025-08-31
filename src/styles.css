@@ -1,7 +1,6 @@
 :root{
   --primary:#2563eb; /* blue */
   --primary-dark:#1e40af;
-  --bg-light:#f9fafb;
   --bg-dark:#0f172a;
   --white:#ffffff;
   --muted:#94a3b8;
@@ -94,12 +93,3 @@ input{
   color:var(--muted);
 }
 .feedback{color:#3b82f6;font-weight:600;margin-top:.5rem;}
-
-/* Mobile responsiveness */
-@media(max-width:640px){
-  .container{
-    padding:1.5rem;
-  }
-  .h1{font-size:1.6rem;}
-  .lead{font-size:.95rem;}
-}
