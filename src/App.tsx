@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 
 /* ------------------ Types ------------------ */
 type ListingType = "auction" | "buy";
@@ -25,8 +25,13 @@ type Item = {
   price?: number;           // for buy now
   currentBid?: number;      // for auction
   endsAt?: number;          // epoch millis, for auction
-  image?: string;
   sellerMasked?: string;
+
+  // new: multiple images (data URLs)
+  images?: string[];
+
+  // legacy single image (migrated into images on load)
+  image?: string;
 
   // optional housing details
   housing?: {
@@ -34,7 +39,7 @@ type Item = {
     kind: HousingKind;
     bath: BathKind;
     roommate: RoommateIntent;
-    link?: string;          // external form/listing if needed
+    link?: string;
   };
 };
 
@@ -69,36 +74,14 @@ const initialItems: Item[] = [
     image: "",
     sellerMasked: "se***@student.csulb.edu",
   },
-  {
-    id: "h-1",
-    title: "Off-Campus Room near CSULB",
-    category: "Housing",
-    type: "buy",
-    price: 950,
-    image: "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?q=80&w=1200&auto=format&fit=crop",
-    sellerMasked: "mi***@student.csulb.edu",
-    housing: {
-      rent: 950,
-      kind: "Room (Private)",
-      bath: "Shared Bath",
-      roommate: "Looking for roommates",
-      link: "",
-    },
-  },
 ];
 
 /* ------------------ Constants ------------------ */
 const CATEGORIES: Category[] = [
-  "Textbooks",
-  "Clothing",
-  "Electronics",
-  "Dorm & Furniture",
-  "Bikes & Scooters",
-  "Tickets",
-  "Services",
-  "Housing",
-  "Other",
+  "Textbooks","Clothing","Electronics","Dorm & Furniture","Bikes & Scooters","Tickets","Services","Housing","Other",
 ];
+const MAX_IMAGES = 8;
+const MAX_MB = 5;
 
 /* ------------------ Utilities ------------------ */
 function maskEmail(e?: string) {
@@ -118,12 +101,26 @@ function timeLeft(ms?: number) {
   const m = Math.floor((left % (1000 * 60 * 60)) / (1000 * 60));
   return `${h}h ${m}m`;
 }
+function fileToDataURL(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("read error"));
+    reader.onload = () => resolve(reader.result as string);
+    reader.readAsDataURL(file);
+  });
+}
 
 /* ------------------ App ------------------ */
 export default function App() {
   const [items, setItems] = useState<Item[]>(() => {
     const fromLS = localStorage.getItem("items-v2");
-    return fromLS ? JSON.parse(fromLS) : initialItems;
+    const parsed: Item[] = fromLS ? JSON.parse(fromLS) : initialItems;
+    // migrate legacy single image -> images[]
+    return parsed.map(i => {
+      if (!i.images && i.image) return {...i, images: i.image ? [i.image] : []};
+      if (!i.images) return {...i, images: []};
+      return i;
+    });
   });
 
   const [showModal, setShowModal] = useState(false);
@@ -356,12 +353,14 @@ function Filters(props: {
 /* ------------------ UI: Card ------------------ */
 function Card({ item }: { item: Item }) {
   const isAuction = item.type === "auction";
-  const priceLabel = isAuction ? `Current bid: ${formatCurrency(item.currentBid)}` : `Price: ${formatCurrency(item.price)}`;
-
+  const first = item.images && item.images.length > 0 ? item.images[0] : undefined;
   return (
     <div className="card">
       <div className="card-media">
-        {item.image ? <img src={item.image} alt="" style={{width:"100%", height:"100%", objectFit:"cover"}}/> : <div>No photo</div>}
+        {first ? <img src={first} alt="" style={{width:"100%", height:"100%", objectFit:"cover"}}/> : <div>No photo</div>}
+        {item.images && item.images.length > 1 && (
+          <div className="badge-photos">{item.images.length} photos</div>
+        )}
       </div>
       <div className="card-body">
         <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", gap:8}}>
@@ -384,9 +383,7 @@ function Card({ item }: { item: Item }) {
       </div>
       <div className="cta-bar">
         {isAuction ? (
-          <>
-            <button className="btn" style={{flex:1}}>Place bid</button>
-          </>
+          <button className="btn" style={{flex:1}}>Place bid</button>
         ) : (
           <button className="btn-primary" style={{flex:1}}>Buy now</button>
         )}
@@ -421,7 +418,7 @@ function AuthCard({ onBack }: { onBack: ()=>void }) {
   );
 }
 
-/* ------------------ UI: New Listing Modal ------------------ */
+/* ------------------ UI: New Listing Modal (with multi-image upload) ------------------ */
 function NewListingModal({
   onClose, onPublish
 }:{
@@ -433,7 +430,6 @@ function NewListingModal({
   const [category, setCategory] = useState<Category>("Textbooks");
   const [startingBid, setStartingBid] = useState<string>("");
   const [price, setPrice] = useState<string>("");
-  const [image, setImage] = useState("");
   const [durationHours, setDurationHours] = useState<number>(24);
 
   // housing fields
@@ -443,31 +439,47 @@ function NewListingModal({
   const [hRoommate, setHRoommate] = useState<RoommateIntent>("Looking for roommates");
   const [hLink, setHLink] = useState("");
 
+  // images
+  const [images, setImages] = useState<string[]>([]);
+  const inputRef = useRef<HTMLInputElement>(null);
   const isAuction = type === "auction";
   const isHousing = category === "Housing";
+
+  async function onFilesSelected(files: FileList | null) {
+    if (!files) return;
+    const arr = Array.from(files);
+    const remaining = MAX_IMAGES - images.length;
+    const slice = arr.slice(0, Math.max(0, remaining));
+    const valid = slice.filter(f => f.size <= MAX_MB * 1024 * 1024);
+    const datas = await Promise.all(valid.map(fileToDataURL));
+    setImages(prev => [...prev, ...datas]);
+  }
+  function removeImage(idx:number){
+    setImages(prev => prev.filter((_,i)=>i!==idx));
+  }
 
   function publish(){
     const id = Math.random().toString(36).slice(2,9);
     const base: Item = {
       id, title: title.trim() || "Untitled",
       category,
-      type,
-      image,
+      type: isHousing ? "buy" : type, // Housing => buy/rent style
       sellerMasked: maskEmail("se***@student.csulb.edu"),
+      images
     };
 
-    if (isAuction) {
+    if (!isHousing && isAuction) {
       base.currentBid = Number(startingBid || 0);
       base.endsAt = Date.now() + durationHours * 60 * 60 * 1000;
-    } else {
+    } else if (!isHousing && !isAuction) {
       base.price = Number(price || 0);
     }
 
     if (isHousing) {
-      base.type = "buy";
-      base.price = Number(rent || 0);
+      const rentNum = Number(rent || 0);
+      base.price = rentNum;
       base.housing = {
-        rent: Number(rent || 0),
+        rent: rentNum,
         kind: hKind,
         bath: hBath,
         roommate: hRoommate,
@@ -476,6 +488,11 @@ function NewListingModal({
     }
 
     onPublish(base);
+  }
+
+  function onDrop(e: React.DragEvent<HTMLDivElement>){
+    e.preventDefault();
+    onFilesSelected(e.dataTransfer.files);
   }
 
   return (
@@ -583,10 +600,39 @@ function NewListingModal({
           </>
         )}
 
-        <div>
-          <label>Photo URL (optional)</label>
-          <input className="input" placeholder="https://…" value={image} onChange={e=>setImage(e.target.value)} />
+        {/* Photos */}
+        <div className="uploader" onDragOver={e=>e.preventDefault()} onDrop={onDrop}>
+          <div className="drop">
+            <div>
+              <strong>Photos</strong>
+              <div style={{color:"var(--muted)", fontSize:13}}>Add up to {MAX_IMAGES} images (≤ {MAX_MB}MB each). You can drag & drop.</div>
+            </div>
+            <div style={{display:"flex", gap:8}}>
+              <input
+                ref={inputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                capture="environment"
+                className="file-input"
+                onChange={(e)=>onFilesSelected(e.target.files)}
+                style={{display:"none"}}
+              />
+              <button className="pill" onClick={()=>inputRef.current?.click()}>Choose files</button>
+            </div>
+          </div>
+          {images.length>0 && (
+            <div className="thumbs">
+              {images.map((src, idx)=>(
+                <div className="thumb" key={idx}>
+                  <img src={src} alt={`photo ${idx+1}`} />
+                  <button className="rm" onClick={()=>removeImage(idx)}>×</button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
+
       </div>
 
       <div className="modal-foot">
@@ -597,7 +643,7 @@ function NewListingModal({
   );
 }
 
-/* ------------------ Legal copy (minimal, protective, anonymous) ------------------ */
+/* ------------------ Legal copy (minimal) ------------------ */
 const TERMS_TXT = `
 CSULB Marketplace — Terms of Use
 
