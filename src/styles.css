@@ -1,22 +1,102 @@
-:root{ --gold:#b8860b; --black:#000; --white:#fff; --border:#e5e7eb; --muted:#64748b; }
-body{margin:0;font-family:system-ui;background:var(--white);color:var(--black)}
-.container{max-width:72rem;margin:0 auto;padding:0 1rem}
-.topbar{position:sticky;top:0;background:var(--black);color:var(--white);padding:.5rem 0;}
-.brand{font-weight:700;color:var(--gold);background:none;border:none;}
-.searchbar input, .searchbar select{padding:.4rem;border-radius:.5rem;border:1px solid var(--border)}
-.tabs{display:flex;gap:.5rem;margin:1rem 0}
-.tab{border:1px solid var(--border);padding:.5rem 1rem;border-radius:999px;background:var(--white)}
-.tab-on{background:var(--gold);color:var(--white)}
-.h1{font-size:2rem;font-weight:800}
-.lead{color:var(--muted)}
-.hero-actions{margin-top:1rem;display:flex;gap:.5rem;flex-wrap:wrap}
-.footer-note{text-align:center;margin-top:2rem;padding-top:1rem;border-top:1px solid var(--border)}
-.feedback{font-weight:600;color:var(--gold)}
-.banner{margin:1rem 0;padding:1rem;border-radius:.75rem;background:var(--gold);color:var(--white)}
-.badge{font-weight:700;margin-right:.5rem}
-.grid-cards{display:grid;gap:1rem;grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
-.card{border:1px solid var(--border);border-radius:.75rem;padding:1rem}
-.title{font-weight:600}
-.btn-primary{background:var(--gold);color:var(--white);border:none;padding:.6rem 1rem;border-radius:.5rem}
-.btn{background:var(--white);color:var(--black);border:1px solid var(--border);padding:.6rem 1rem;border-radius:.5rem}
+/* ====== CSULB Marketplace – modern theme ====== */
+:root{
+  /* New palette (modern, accessible) */
+  --bg:#f6f7fb;           /* page background */
+  --surface:#ffffff;      /* cards / navbar */
+  --text:#0b1220;         /* primary text */
+  --muted:#667085;        /* secondary text */
+  --border:#e6e8ee;       /* borders / dividers */
+  --ring:#d9c06c;         /* focus outline */
+  --accent:#caa24a;       /* gold accent */
+  --accent-600:#a8862e;   /* gold hover */
+}
+
+/* Global */
+*{box-sizing:border-box}
+html,body,#root{height:100%}
+body{margin:0;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif;background:var(--bg);color:var(--text);}
+
+.container{max-width:1120px;margin:0 auto;padding:0 20px}
+
+/* Topbar */
+.topbar{
+  position:sticky;top:0;z-index:20;
+  background:var(--surface);
+  border-bottom:1px solid var(--border);
+  backdrop-filter:saturate(180%) blur(6px);
+}
+.row-between{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 0}
+.brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:18px;color:var(--text);background:none;border:0;cursor:pointer}
+.brand-logo{
+  width:34px;height:34px;border-radius:10px;
+  display:grid;place-items:center;
+  color:var(--surface);
+  background:linear-gradient(135deg,var(--accent) 0%, var(--accent-600) 100%);
+  border:1px solid #e9d7a5;
+}
+.searchbar{display:flex;gap:8px}
+.searchbar input,.searchbar select{
+  padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:#fff;min-width:220px
+}
+
+/* Buttons */
+.btn,.btn-primary{
+  border-radius:12px;padding:10px 16px;font-weight:600;border:1px solid var(--border);cursor:pointer;
+}
+.btn{background:#fff;color:var(--text)}
+.btn:hover{background:#f3f4f6}
+.btn-primary{background:var(--accent);color:#111; border-color:#00000014}
+.btn-primary:hover{background:var(--accent-600)}
+.btn-block{width:100%}
+
+/* Hero (home) */
+.hero{
+  background:radial-gradient(1200px 600px at 50% -10%, #fff 20%, #f2f4f8 60%, #eaedf4 100%);
+  border-bottom:1px solid var(--border);
+}
+.hero-wrap{padding:56px 0 28px}
+.h1{font-size: clamp(28px, 5vw, 40px); line-height:1.1; margin:0;font-weight:900; letter-spacing:-0.02em;}
+.lead{margin-top:12px;color:var(--muted);font-size:16px}
+
+/* Home actions */
+.hero-actions{margin-top:22px;display:flex;gap:12px;flex-wrap:wrap}
 .wide-sm{width:100%}
+@media(min-width:640px){ .wide-sm{width:auto} }
+
+/* Auth card (vertical sign in) */
+.auth-wrap{display:grid;place-items:center;padding:40px 0}
+.auth-card{
+  width:100%;max-width:420px;background:var(--surface);
+  border:1px solid var(--border);border-radius:16px;
+  padding:22px; box-shadow:0 10px 30px rgba(16,24,40,.06);
+}
+.auth-title{margin:0 0 14px 0;font-size:22px;font-weight:800}
+.input{width:100%;padding:12px 14px;border:1px solid var(--border);border-radius:12px;background:#fff}
+.input:focus{outline:3px solid var(--ring);outline-offset:1px}
+.stack{display:grid;gap:12px}
+
+/* Tabs (market) */
+.tabs{display:flex;gap:8px;margin:18px 0}
+.tab{border:1px solid var(--border);padding:10px 16px;border-radius:999px;background:#fff;color:var(--text);cursor:pointer}
+.tab-on{background:var(--accent);color:#111}
+
+/* Banner (market) */
+.banner{
+  margin:18px 0;padding:12px;border-radius:14px;
+  background:linear-gradient(90deg,var(--accent), #141414);
+  color:#111; border:1px solid #e9d7a5;
+}
+.banner .muted{color:#111}
+
+/* Cards */
+.grid-cards{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+.card{border:1px solid var(--border);border-radius:16px;background:#fff;overflow:hidden}
+.card-body{padding:16px}
+.title{font-weight:700}
+
+/* Footer note */
+.footer-note{text-align:center;margin:28px 0 8px 0;padding-top:12px;border-top:1px solid var(--border)}
+.feedback{font-weight:700;color:var(--accent)}
+.muted{color:var(--muted)}
+.pt-24{padding-top:24px}.pb-24{padding-bottom:24px}
+.empty{padding:32px;text-align:center;color:var(--muted)}
