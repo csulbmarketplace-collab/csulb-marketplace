@@ -1,493 +1,620 @@
-import React, { useEffect, useMemo, useState } from "react";
-import "./styles.css";
+import React, { useMemo, useState } from "react";
 
-/** ---------------------------
- *  Tiny hash router
- * --------------------------*/
-type Route = "home" | "explore" | "auth" | "terms" | "privacy";
-function useRoute(): [Route, (r: Route) => void] {
-  const parse = (): Route => {
-    const h = location.hash.replace("#/", "");
-    return (["home","explore","auth","terms","privacy"].includes(h) ? (h as Route) : "home");
-  };
-  const [route, setRoute] = useState<Route>(parse());
-  useEffect(() => {
-    const onHash = () => setRoute(parse());
-    window.addEventListener("hashchange", onHash);
-    if (!location.hash) location.hash = "/home";
-    return () => window.removeEventListener("hashchange", onHash);
-  }, []);
-  const nav = (r: Route) => (location.hash = `/${r}`);
-  return [route, nav];
-}
+/* ------------------ Types ------------------ */
+type ListingType = "auction" | "buy";
+type Category =
+  | "Textbooks"
+  | "Clothing"
+  | "Electronics"
+  | "Dorm & Furniture"
+  | "Bikes & Scooters"
+  | "Tickets"
+  | "Services"
+  | "Housing"
+  | "Other";
 
-/** ---------------------------
- *  Fake auth (localStorage)
- * --------------------------*/
-const LS_USER = "cm_user";
-const LS_ACCTS = "cm_accounts";
-function useAuth() {
-  const [user, setUser] = useState<{email:string}|null>(() => {
-    try { const raw = localStorage.getItem(LS_USER); return raw ? JSON.parse(raw) : null; } catch {return null}
-  });
-  function login(email: string) {
-    const u = {email};
-    localStorage.setItem(LS_USER, JSON.stringify(u));
-    setUser(u);
-  }
-  function logout() {
-    localStorage.removeItem(LS_USER);
-    setUser(null);
-  }
-  function register(email: string, pass: string) {
-    const accts = JSON.parse(localStorage.getItem(LS_ACCTS) || "{}");
-    if (accts[email]) throw new Error("Account already exists");
-    accts[email] = pass;
-    localStorage.setItem(LS_ACCTS, JSON.stringify(accts));
-    login(email);
-  }
-  function check(email: string, pass: string) {
-    const accts = JSON.parse(localStorage.getItem(LS_ACCTS) || "{}");
-    if (!accts[email] || accts[email] !== pass) throw new Error("Invalid credentials");
-    login(email);
-  }
-  return { user, login, logout, register, check };
-}
+type HousingKind = "Studio" | "1BR" | "2BR" | "3BR+" | "Room (Private)" | "Room (Shared)";
+type BathKind = "Private Bath" | "Shared Bath";
+type RoommateIntent = "Looking for roommates" | "Private place" | "Either";
 
-/** ---------------------------
- *  Items store (localStorage)
- * --------------------------*/
 type Item = {
   id: string;
   title: string;
-  img?: string;
-  type: "auction" | "buy";
-  price?: string;
-  bid?: string;
-  timeLeft?: string;
-  category: string;
-  seller: string;
+  category: Category;
+  type: ListingType;
+  price?: number;           // for buy now
+  currentBid?: number;      // for auction
+  endsAt?: number;          // epoch millis, for auction
+  image?: string;
+  sellerMasked?: string;
+
+  // optional housing details
+  housing?: {
+    rent: number;
+    kind: HousingKind;
+    bath: BathKind;
+    roommate: RoommateIntent;
+    link?: string;          // external form/listing if needed
+  };
 };
-const DEMO: Item[] = [
-  { id:"1", title:"MATH 123 Textbook (Like New)", img:"https://images.unsplash.com/photo-1451933335233-cf0db9c7e91f?q=80&w=1200&auto=format&fit=crop", type:"auction", bid:"$18.00", timeLeft:"26h left", category:"Textbooks", seller:"se***@student.csulb.edu" },
-  { id:"2", title:"Mini Fridge (Dorm Friendly)", img:"", type:"buy", price:"$70.00", category:"Dorm & Furniture", seller:"by***@student.csulb.edu" },
-  { id:"3", title:"Electric Scooter", img:"", type:"auction", bid:"$110.00", timeLeft:"5.9h left", category:"Bikes & Scooters", seller:"se***@student.csulb.edu" },
-  { id:"4", title:"CSULB Hoodie (M)", img:"", type:"buy", price:"$25.00", category:"Clothing", seller:"mi***@student.csulb.edu" },
-  { id:"5", title:"IKEA Desk + Chair Set", img:"", type:"auction", bid:"$62.00", timeLeft:"14h left", category:"Dorm & Furniture", seller:"ab***@student.csulb.edu" },
-  { id:"6", title:"TI-84 Calculator", img:"https://images.unsplash.com/photo-1515879218367-8466d910aaa4?q=80&w=1200&auto=format&fit=crop", type:"buy", price:"$45.00", category:"Electronics", seller:"jo***@student.csulb.edu" },
+
+/* ------------------ Mock Initial Items ------------------ */
+const initialItems: Item[] = [
+  {
+    id: "t-1",
+    title: "MATH 123 Textbook (Like New)",
+    category: "Textbooks",
+    type: "auction",
+    currentBid: 18,
+    endsAt: Date.now() + 1000 * 60 * 60 * 26,
+    image: "https://images.unsplash.com/photo-1519681393784-d120267933ba?q=80&w=1200&auto=format&fit=crop",
+    sellerMasked: "se***@student.csulb.edu",
+  },
+  {
+    id: "d-1",
+    title: "Mini Fridge (Dorm Friendly)",
+    category: "Dorm & Furniture",
+    type: "buy",
+    price: 70,
+    image: "",
+    sellerMasked: "by***@student.csulb.edu",
+  },
+  {
+    id: "b-1",
+    title: "Electric Scooter",
+    category: "Bikes & Scooters",
+    type: "auction",
+    currentBid: 110,
+    endsAt: Date.now() + 1000 * 60 * 60 * 5.5,
+    image: "",
+    sellerMasked: "se***@student.csulb.edu",
+  },
+  {
+    id: "h-1",
+    title: "Off-Campus Room near CSULB",
+    category: "Housing",
+    type: "buy",
+    price: 950,
+    image: "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?q=80&w=1200&auto=format&fit=crop",
+    sellerMasked: "mi***@student.csulb.edu",
+    housing: {
+      rent: 950,
+      kind: "Room (Private)",
+      bath: "Shared Bath",
+      roommate: "Looking for roommates",
+      link: "",
+    },
+  },
 ];
-const LS_ITEMS = "cm_items";
-function useItems(){
-  const [items, setItems] = useState<Item[]>(()=>{
-    try{
-      const raw = localStorage.getItem(LS_ITEMS);
-      if (raw) return JSON.parse(raw);
-    }catch{}
-    return DEMO;
+
+/* ------------------ Constants ------------------ */
+const CATEGORIES: Category[] = [
+  "Textbooks",
+  "Clothing",
+  "Electronics",
+  "Dorm & Furniture",
+  "Bikes & Scooters",
+  "Tickets",
+  "Services",
+  "Housing",
+  "Other",
+];
+
+/* ------------------ Utilities ------------------ */
+function maskEmail(e?: string) {
+  if (!e) return "";
+  const [u, d] = e.split("@");
+  return (u.slice(0, 2) + "***@" + d) as string;
+}
+function formatCurrency(n?: number) {
+  if (n == null) return "-";
+  return `$${n.toFixed(2)}`;
+}
+function timeLeft(ms?: number) {
+  if (!ms) return "-";
+  const left = ms - Date.now();
+  if (left <= 0) return "Ended";
+  const h = Math.floor(left / (1000 * 60 * 60));
+  const m = Math.floor((left % (1000 * 60 * 60)) / (1000 * 60));
+  return `${h}h ${m}m`;
+}
+
+/* ------------------ App ------------------ */
+export default function App() {
+  const [items, setItems] = useState<Item[]>(() => {
+    const fromLS = localStorage.getItem("items-v2");
+    return fromLS ? JSON.parse(fromLS) : initialItems;
   });
-  useEffect(()=>{ localStorage.setItem(LS_ITEMS, JSON.stringify(items)); },[items]);
-  function add(item: Omit<Item,"id">){
-    const id = String(Date.now());
-    setItems(prev => [{...item, id}, ...prev]);
-  }
-  return {items, add};
-}
 
-/** ---------------------------
- *  UI Helpers
- * --------------------------*/
-function Brand({onHome}:{onHome:()=>void}){
-  return (
-    <button className="brand" onClick={onHome} aria-label="Go home">
-      <span className="brand-badge"><span>▲</span></span>
-      CSULB Marketplace
-    </button>
-  );
-}
-function Nav({
-  user, onExplore, onAuth, onLogout, onNew
-}:{user:{email:string}|null,onExplore:()=>void,onAuth:()=>void,onLogout:()=>void,onNew:()=>void}){
-  return (
-    <div className="topbar">
-      <div className="container topbar-wrap">
-        <Brand onHome={()=>location.hash="/home"} />
-        {/* Desktop actions */}
-        <div className="nav-actions hide-mobile">
-          <button className="btn" onClick={onExplore}>Explore</button>
-          {user ? (
-            <>
-              <button className="btn btn-primary" onClick={onNew}>+ New listing</button>
-              <span className="small" aria-label="Logged in email">{user.email}</span>
-              <button className="btn" onClick={onLogout}>Log out</button>
-            </>
-          ) : (
-            <button className="btn btn-primary" onClick={onAuth}>Sign in</button>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
+  const [showModal, setShowModal] = useState(false);
+  const [activeTab, setActiveTab] = useState<"home" | "explore" | "auth">("home");
 
-/** ---------------------------
- *  Pages
- * --------------------------*/
-function Home({onSignIn,onExplore}:{onSignIn:()=>void,onExplore:()=>void}){
-  return (
-    <section className="section">
-      <div className="container">
-        <div className="glass hero-card">
-          <h1 className="h1">Buy & sell on campus — safely, fast, and student-only</h1>
-          <p className="lead">Auctions and buy-now listings, verified with <strong>@csulb.edu</strong>.</p>
-          {/* Desktop hero CTAs */}
-          <div className="hide-mobile" style={{display:"flex",gap:10}}>
-            <button className="btn btn-primary btn-lg" onClick={onSignIn}>Sign in</button>
-            <button className="btn btn-lg" onClick={onExplore}>Explore marketplace</button>
-          </div>
-        </div>
+  // filters
+  const [categoryFilter, setCategoryFilter] = useState<"All" | Category>("All");
+  const [minPrice, setMinPrice] = useState<string>("");
+  const [maxPrice, setMaxPrice] = useState<string>("");
+  // housing-only filters
+  const [housingKind, setHousingKind] = useState<HousingKind | "Any">("Any");
+  const [bathKind, setBathKind] = useState<BathKind | "Any">("Any");
+  const [roommateIntent, setRoommateIntent] = useState<RoommateIntent | "Any">("Any");
 
-        <div className="center mt-24 small">
-          🔧 Work in progress — launching soon. • Feedback: <a href="mailto:csulbmarketplace@gmail.com">csulbmarketplace@gmail.com</a>
-        </div>
-
-        {/* Mobile sticky — single clean action row */}
-        <div className="stickyCta show-mobile">
-          <div className="container">
-            <div className="stickyBar">
-              <button className="btn btn-primary btn-block" onClick={onSignIn}>Sign in</button>
-              <button className="btn btn-block" onClick={onExplore}>Explore</button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function Filters({ value, onChange }:{ value:"all"|"auction"|"buy", onChange:(v:"all"|"auction"|"buy")=>void }){
-  return (
-    <div className="explore-filters container">
-      {(["all","auction","buy"] as const).map(v=>(
-        <button
-          key={v}
-          className={`chip ${value===v?'active':''}`}
-          aria-pressed={value===v}
-          onClick={()=>onChange(v)}
-        >
-          {v==='all'?'All':v==='auction'?'Auctions':'Buy Now'}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function ListingCard({item}:{item:Item}){
-  const primaryLabel = item.type==='auction' ? 'Place bid' : 'Buy now';
-  return (
-    <article className="card glass" role="article" aria-label={item.title}>
-      <div className="card-media">
-        {item.img ? <img src={item.img} loading="lazy" alt={item.title}/> : <div className="ph" aria-hidden/>}
-      </div>
-      <div className="card-body">
-        <h3 className="card-title">{item.title}</h3>
-        <div className="small">{item.category} • by {item.seller}</div>
-        <div className="badges mt-12">
-          {item.type==='auction' && <span className="badge badge-auction">AUCTION</span>}
-          {item.type==='buy'     && <span className="badge badge-buynow">BUY NOW</span>}
-          {item.type==='auction' && <span className="badge badge-time">{item.timeLeft}</span>}
-        </div>
-        <div className="card-price">
-          {item.type==='auction' ? <>Current bid: <strong>{item.bid}</strong></> : <>Price: <strong>{item.price}</strong></>}
-        </div>
-        <div className="card-ctas">
-          <button className="btn-primary" aria-label={`${primaryLabel} for ${item.title}`}>{primaryLabel}</button>
-          <button className="btn">Details</button>
-        </div>
-      </div>
-    </article>
-  );
-}
-
-function Explore({items}:{items:Item[]}){
-  const [filter, setFilter] = useState<"all"|"auction"|"buy">("all");
-  const filtered = useMemo(()=>items.filter(i => filter==='all' ? true : (filter==='buy' ? i.type==='buy' : i.type==='auction')), [filter, items]);
-  return (
-    <section className="section">
-      <div className="container">
-        <div style={{display:"flex",alignItems:"center",gap:10, marginBottom:10}}>
-          <a className="btn" href="#/home">← Home</a>
-          <h2 className="h2" style={{margin:0}}>Explore</h2>
-        </div>
-
-        <Filters value={filter} onChange={setFilter} />
-
-        {filtered.length ? (
-          <div className="cards">
-            {filtered.map(i => <ListingCard key={i.id} item={i} />)}
-          </div>
-        ) : (
-          <div className="glass" style={{padding:18}}>
-            <strong>No listings yet.</strong> Be the first to post! (Demo)
-          </div>
-        )}
-      </div>
-
-      {/* Mobile sticky actions - only Explore */}
-      <div className="stickyCta show-mobile">
-        <div className="container">
-          <div className="stickyBar">
-            <a className="btn btn-block" href="#/home">Home</a>
-            <button className="btn btn-primary btn-block">+ New listing</button>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function Auth({ onClose, auth }:{ onClose:()=>void, auth: ReturnType<typeof useAuth> }){
-  const [isReg, setIsReg] = useState(false);
-  const [email, setEmail] = useState("");
-  const [pass, setPass] = useState("");
-  const [err, setErr] = useState("");
-
-  function submit(){
-    setErr("");
-    try{
-      if(isReg) auth.register(email, pass);
-      else auth.check(email, pass);
-      onClose();
-    }catch(e:any){ setErr(e.message || "Error"); }
+  function persist(newItems: Item[]) {
+    setItems(newItems);
+    localStorage.setItem("items-v2", JSON.stringify(newItems));
   }
 
-  return (
-    <section className="section authWrap">
-      <div className="small center" style={{marginBottom:12}}>
-        <a className="btn" href="#/home">← Back to Home</a>
-      </div>
-      <div className="glass authCard">
-        <div style={{display:"flex",gap:8, justifyContent:"center", marginBottom:12}}>
-          <button className={`btn ${!isReg?'btn-primary':''}`} onClick={()=>setIsReg(false)}>Log in</button>
-          <button className={`btn ${isReg?'btn-primary':''}`} onClick={()=>setIsReg(true)}>Create account</button>
-        </div>
-        <input className="input" placeholder="you@student.csulb.edu" value={email} onChange={e=>setEmail(e.target.value)} />
-        <div className="mt-12" />
-        <input className="input" placeholder="Password" type="password" value={pass} onChange={e=>setPass(e.target.value)} />
-        {err && <div className="small" style={{color:"#ffb4c2", marginTop:8}}>{err}</div>}
-        <div className="mt-12" />
-        <button className="btn-primary btn-block" onClick={submit}>{isReg ? "Register" : "Continue"}</button>
-        <div className="mt-12" />
-        <button className="btn btn-block" onClick={()=>setIsReg(!isReg)}>
-          {isReg ? "Already have an account? Log in" : "Need an account? Create one"}
-        </button>
-      </div>
-    </section>
-  );
-}
+  const filtered = useMemo(() => {
+    let list = [...items];
 
-/** ---------------------------
- *  Legal pages
- * --------------------------*/
-function TermsPage(){
-  return (
-    <section className="section">
-      <div className="container glass" style={{padding:22, maxWidth:980, marginInline:"auto"}}>
-        <h2 className="h2">Terms of Use</h2>
-        <p className="small">Last updated: Aug 31, 2025</p>
-        <p>
-          CSULB Marketplace is a student-made website operated independently by a CSULB student (<strong>IB</strong>). 
-          We are <strong>not affiliated with, endorsed by, or sponsored by CSU Long Beach</strong>. By using this site,
-          you agree to these Terms.
-        </p>
-        <ol>
-          <li><strong>Eligibility.</strong> This site is intended for CSULB students. Account access may require a CSULB email.</li>
-          <li><strong>No payments handled.</strong> We do not process payments or hold funds. All transactions are between users.</li>
-          <li><strong>Safety.</strong> Meet in public places on campus (e.g., USU or Library). Inspect items in person. Do not share sensitive info.</li>
-          <li><strong>Prohibited content.</strong> No illegal items, weapons, drugs, stolen goods, counterfeit goods, or academic dishonesty services.</li>
-          <li><strong>User content.</strong> You are responsible for the accuracy of your listings. We may remove content that violates these Terms.</li>
-          <li><strong>Disclaimer.</strong> The service is provided “as is” without warranties. We do not guarantee availability, quality, or safety of items or users.</li>
-          <li><strong>Limitation of liability.</strong> To the maximum extent permitted by law, we are not liable for indirect, incidental, special, or consequential damages, or any loss arising from transactions between users.</li>
-          <li><strong>Indemnity.</strong> You agree to indemnify and hold us harmless from claims arising out of your use, listings, or violations of these Terms.</li>
-          <li><strong>Enforcement & takedown.</strong> We may suspend accounts, remove content, or cooperate with lawful requests.</li>
-          <li><strong>Governing law & venue.</strong> California law governs. Any disputes shall be resolved in Los Angeles County, CA.</li>
-          <li><strong>Changes.</strong> We may update these Terms; continued use constitutes acceptance.</li>
-          <li><strong>Contact.</strong> csulbmarketplace@gmail.com</li>
-        </ol>
-        <div className="mt-16" />
-        <a className="btn" href="#/home">← Back</a>
-      </div>
-    </section>
-  );
-}
+    // category
+    if (categoryFilter !== "All") list = list.filter(i => i.category === categoryFilter);
 
-function PrivacyPage(){
-  return (
-    <section className="section">
-      <div className="container glass" style={{padding:22, maxWidth:980, marginInline:"auto"}}>
-        <h2 className="h2">Privacy Policy</h2>
-        <p className="small">Last updated: Aug 31, 2025</p>
-        <p>
-          This site collects the minimum information needed to operate (e.g., your email for account access). 
-          We store basic account data in your browser and our site storage. We do not sell your data.
-        </p>
-        <ul>
-          <li><strong>Account data.</strong> Email and a hashed password (for the real launch; demo stores locally). You may request deletion.</li>
-          <li><strong>Usage.</strong> We may collect non-identifying analytics (e.g., page views) to improve the site.</li>
-          <li><strong>Security.</strong> No system is 100% secure. Do not reuse passwords. Report issues to csulbmarketplace@gmail.com.</li>
-          <li><strong>Third-party links.</strong> External sites have their own policies; we are not responsible for them.</li>
-          <li><strong>Children.</strong> This site is intended for university-age users.</li>
-          <li><strong>Changes.</strong> We may update this policy; continued use constitutes acceptance.</li>
-        </ul>
-        <p className="small">Student-made website by <strong>IB</strong>. Not affiliated with CSULB.</p>
-        <div className="mt-16" />
-        <a className="btn" href="#/home">← Back</a>
-      </div>
-    </section>
-  );
-}
+    // price
+    const min = minPrice ? Number(minPrice) : undefined;
+    const max = maxPrice ? Number(maxPrice) : undefined;
+    if (min != null) {
+      list = list.filter(i => (i.type === "buy" ? (i.price ?? Infinity) >= min : (i.currentBid ?? Infinity) >= min));
+    }
+    if (max != null) {
+      list = list.filter(i => (i.type === "buy" ? (i.price ?? -Infinity) <= max : (i.currentBid ?? -Infinity) <= max));
+    }
 
-/** ---------------------------
- *  New Listing (modal)
- * --------------------------*/
-function NewListingModal({
-  onClose, onCreate, seller
-}:{onClose:()=>void,onCreate:(i:Omit<Item,"id">)=>void,seller:string}){
-  const [title, setTitle] = useState("");
-  const [type, setType] = useState<"auction"|"buy">("auction");
-  const [price, setPrice] = useState("");
-  const [bid, setBid] = useState("");
-  const [timeLeft, setTimeLeft] = useState("24h left");
-  const [category, setCategory] = useState("Misc");
-  const [img, setImg] = useState("");
+    // housing filters only when category is Housing
+    if (categoryFilter === "Housing") {
+      list = list.filter(i => i.category === "Housing");
+      if (housingKind !== "Any") list = list.filter(i => i.housing?.kind === housingKind);
+      if (bathKind !== "Any") list = list.filter(i => i.housing?.bath === bathKind);
+      if (roommateIntent !== "Any") list = list.filter(i => i.housing?.roommate === roommateIntent);
+    }
 
-  function submit(){
-    if(!title.trim()) return alert("Add a title");
-    if(type==="buy" && !price) return alert("Add a price");
-    if(type==="auction" && !bid) return alert("Add a starting bid");
-    onCreate({
-      title: title.trim(),
-      type,
-      price: type==="buy" ? `$${Number(price).toFixed(2)}` : undefined,
-      bid:   type==="auction" ? `$${Number(bid).toFixed(2)}`   : undefined,
-      timeLeft: type==="auction" ? timeLeft : undefined,
-      category,
-      img,
-      seller
-    });
-    onClose();
-  }
-
-  return (
-    <div className="modal-backdrop" onClick={onClose} role="dialog" aria-modal="true">
-      <div className="modal" onClick={(e)=>e.stopPropagation()}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center", marginBottom:8}}>
-          <h3 className="h2" style={{margin:0}}>New listing</h3>
-          <button className="btn" onClick={onClose}>✕</button>
-        </div>
-
-        <div className="modal-grid">
-          <div>
-            <label className="small">Title</label>
-            <input className="input" value={title} onChange={e=>setTitle(e.target.value)} placeholder="e.g., CSULB hoodie (M)" />
-          </div>
-          <div>
-            <label className="small">Category</label>
-            <input className="input" value={category} onChange={e=>setCategory(e.target.value)} placeholder="e.g., Clothing" />
-          </div>
-          <div>
-            <label className="small">Type</label>
-            <div style={{display:"flex",gap:8}}>
-              <button className={`btn ${type==='auction'?'btn-primary':''}`} onClick={()=>setType("auction")}>Auction</button>
-              <button className={`btn ${type==='buy'?'btn-primary':''}`} onClick={()=>setType("buy")}>Buy now</button>
-            </div>
-          </div>
-          {type==="buy" ? (
-            <div>
-              <label className="small">Price (USD)</label>
-              <input className="input" type="number" min="0" step="0.01" value={price} onChange={e=>setPrice(e.target.value)} />
-            </div>
-          ) : (
-            <>
-              <div>
-                <label className="small">Starting bid (USD)</label>
-                <input className="input" type="number" min="0" step="0.01" value={bid} onChange={e=>setBid(e.target.value)} />
-              </div>
-              <div>
-                <label className="small">Duration</label>
-                <input className="input" value={timeLeft} onChange={e=>setTimeLeft(e.target.value)} placeholder="24h left" />
-              </div>
-            </>
-          )}
-          <div className="modal-grid" style={{gridTemplateColumns:"1fr"}}>
-            <label className="small">Photo URL (optional)</label>
-            <input className="input" value={img} onChange={e=>setImg(e.target.value)} placeholder="https://…" />
-          </div>
-        </div>
-
-        <div className="mt-16" />
-        <div style={{display:"flex",gap:10, justifyContent:"flex-end"}}>
-          <button className="btn" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" onClick={submit}>Publish</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/** ---------------------------
- *  Footer
- * --------------------------*/
-function Footer(){
-  return (
-    <footer className="footer">
-      <div className="container" style={{display:"flex",justifyContent:"center",gap:18,flexWrap:"wrap"}}>
-        <span>© 2025 CSULB Marketplace • Not affiliated with CSULB • Student-made by <strong>IB</strong></span>
-        <a href="#/terms">Terms</a>
-        <a href="#/privacy">Privacy</a>
-        <a href="mailto:csulbmarketplace@gmail.com">Contact</a>
-      </div>
-    </footer>
-  );
-}
-
-/** ---------------------------
- *  App
- * --------------------------*/
-export default function App(){
-  const [route, nav] = useRoute();
-  const auth = useAuth();
-  const {items, add} = useItems();
-  const [showNew, setShowNew] = useState(false);
+    return list;
+  }, [items, categoryFilter, minPrice, maxPrice, housingKind, bathKind, roommateIntent]);
 
   return (
     <>
-      <Nav
-        user={auth.user}
-        onExplore={()=>nav("explore")}
-        onAuth={()=>nav("auth")}
-        onLogout={auth.logout}
-        onNew={()=>auth.user ? setShowNew(true) : nav("auth")}
-      />
+      <Topbar onGoHome={() => setActiveTab("home")} onExplore={() => setActiveTab("explore")} />
 
-      {route==="home"    && <Home onSignIn={()=>nav("auth")} onExplore={()=>nav("explore")} />}
-      {route==="explore" && <Explore items={items} />}
-      {route==="auth"    && <Auth onClose={()=>nav("home")} auth={auth} />}
-      {route==="terms"   && <TermsPage />}
-      {route==="privacy" && <PrivacyPage />}
+      {activeTab === "home" && (
+        <Home heroAction={() => setActiveTab("auth")} explore={() => setActiveTab("explore")} />
+      )}
 
-      <div className="container center small mt-24">
-        🔒 Be smart & safe: meet in public areas on campus (USU / Library).
-      </div>
+      {activeTab === "explore" && (
+        <div className="container section">
+          <div style={{display:"flex", alignItems:"center", gap:12, marginBottom:16}}>
+            <button className="pill" onClick={() => setActiveTab("home")}>← Home</button>
+            <h2 style={{margin:0}}>Explore</h2>
+            <div style={{flex:1}} />
+            <button className="btn-primary" onClick={() => setShowModal(true)}>+ New Listing</button>
+          </div>
+
+          <Filters
+            category={categoryFilter}
+            setCategory={setCategoryFilter}
+            minPrice={minPrice}
+            setMinPrice={setMinPrice}
+            maxPrice={maxPrice}
+            setMaxPrice={setMaxPrice}
+            // housing
+            housingShown={categoryFilter === "Housing"}
+            housingKind={housingKind}
+            setHousingKind={setHousingKind}
+            bathKind={bathKind}
+            setBathKind={setBathKind}
+            roommateIntent={roommateIntent}
+            setRoommateIntent={setRoommateIntent}
+          />
+
+          <div className="row cards">
+            {filtered.map(item => (
+              <Card key={item.id} item={item} />
+            ))}
+            {filtered.length === 0 && (
+              <div className="glass" style={{padding:18, gridColumn:"1/-1", textAlign:"center", color:"var(--muted)"}}>
+                Nothing here yet. Try widening your filters.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {activeTab === "auth" && (
+        <AuthCard onBack={() => setActiveTab("home")} />
+      )}
 
       <Footer />
 
-      {showNew && auth.user && (
-        <NewListingModal
-          seller={auth.user.email.replace(/(.{2}).+(@.*)/, (m, a, b) => a+"***"+b)}
-          onClose={()=>setShowNew(false)}
-          onCreate={add}
-        />
+      {showModal && (
+        <>
+          <div className="modal-backdrop" onClick={() => setShowModal(false)} />
+          <div className="modal" role="dialog" aria-modal="true">
+            <NewListingModal
+              onClose={() => setShowModal(false)}
+              onPublish={(newItem) => {
+                persist([newItem, ...items]);
+                setShowModal(false);
+              }}
+            />
+          </div>
+        </>
       )}
     </>
   );
 }
+
+/* ------------------ UI: Topbar / Hero / Footer ------------------ */
+function Topbar({ onGoHome, onExplore }: { onGoHome: () => void; onExplore: () => void }) {
+  return (
+    <div className="topbar">
+      <div className="container topbar-inner">
+        <div className="brand" onClick={onGoHome} style={{cursor:"pointer"}}>
+          <div className="mark">△</div>
+          <div className="name">CSULB Marketplace</div>
+        </div>
+        <div style={{display:"flex", gap:8}}>
+          <button className="pill" onClick={onExplore}>Explore</button>
+          <button className="pill" onClick={onGoHome}>Sign in</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Home({ heroAction, explore }: { heroAction: ()=>void; explore:()=>void }) {
+  return (
+    <div className="container section">
+      <div className="glass hero">
+        <h1 className="h1">Buy & sell on campus — safely, fast, and student-only</h1>
+        <p className="lead">Auctions and buy-now listings, verified with <strong>@csulb.edu</strong>.</p>
+        <div style={{display:"flex", gap:10, flexWrap:"wrap"}}>
+          <button className="btn-primary" onClick={heroAction}>Sign in</button>
+          <button className="btn" onClick={explore}>Explore marketplace</button>
+        </div>
+      </div>
+
+      <div style={{textAlign:"center", color:"var(--muted)", marginTop:16}}>
+        🔐 Be smart & safe: meet in public areas on campus (USU / Library).
+      </div>
+    </div>
+  );
+}
+
+function Footer() {
+  return (
+    <div className="footer">
+      <div className="container" style={{display:"flex", gap:14, justifyContent:"center", flexWrap:"wrap"}}>
+        <div>© 2025 CSULB Marketplace · Not affiliated with CSULB · Student-made by <strong>IB</strong></div>
+        <a href="#" onClick={(e)=>{e.preventDefault(); alert(TERMS_TXT);}}>Terms</a>
+        <a href="#" onClick={(e)=>{e.preventDefault(); alert(PRIVACY_TXT);}}>Privacy</a>
+        <a href="mailto:csulbmarketplace@gmail.com">Contact</a>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------ UI: Filters ------------------ */
+function Filters(props: {
+  category: "All" | Category;
+  setCategory: (c: "All" | Category) => void;
+  minPrice: string; setMinPrice: (v:string)=>void;
+  maxPrice: string; setMaxPrice: (v:string)=>void;
+
+  housingShown: boolean;
+  housingKind: HousingKind | "Any";
+  setHousingKind: (k: HousingKind | "Any") => void;
+  bathKind: BathKind | "Any";
+  setBathKind: (k: BathKind | "Any") => void;
+  roommateIntent: RoommateIntent | "Any";
+  setRoommateIntent: (v: RoommateIntent | "Any") => void;
+}) {
+  return (
+    <div className="filters glass" style={{padding:12}}>
+      <div className="group">
+        <label>Category</label>
+        <select className="select" value={props.category} onChange={e => props.setCategory(e.target.value as any)}>
+          <option value="All">All</option>
+          {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
+      </div>
+
+      <div className="group">
+        <label>Price</label>
+        <input className="input" style={{width:110}} placeholder="min" inputMode="numeric"
+               value={props.minPrice} onChange={e=>props.setMinPrice(e.target.value)} />
+        <span>—</span>
+        <input className="input" style={{width:110}} placeholder="max" inputMode="numeric"
+               value={props.maxPrice} onChange={e=>props.setMaxPrice(e.target.value)} />
+      </div>
+
+      {props.housingShown && (
+        <>
+          <div className="group">
+            <label>Housing</label>
+            <select className="select" value={props.housingKind} onChange={e=>props.setHousingKind(e.target.value as any)}>
+              {["Any","Studio","1BR","2BR","3BR+","Room (Private)","Room (Shared)"].map(v=>(
+                <option key={v} value={v}>{v}</option>
+              ))}
+            </select>
+          </div>
+          <div className="group">
+            <label>Bath</label>
+            <select className="select" value={props.bathKind} onChange={e=>props.setBathKind(e.target.value as any)}>
+              {["Any","Private Bath","Shared Bath"].map(v=> <option key={v} value={v}>{v}</option>)}
+            </select>
+          </div>
+          <div className="group">
+            <label>Roommates</label>
+            <select className="select" value={props.roommateIntent} onChange={e=>props.setRoommateIntent(e.target.value as any)}>
+              {["Any","Looking for roommates","Private place","Either"].map(v=> <option key={v} value={v}>{v}</option>)}
+            </select>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/* ------------------ UI: Card ------------------ */
+function Card({ item }: { item: Item }) {
+  const isAuction = item.type === "auction";
+  const priceLabel = isAuction ? `Current bid: ${formatCurrency(item.currentBid)}` : `Price: ${formatCurrency(item.price)}`;
+
+  return (
+    <div className="card">
+      <div className="card-media">
+        {item.image ? <img src={item.image} alt="" style={{width:"100%", height:"100%", objectFit:"cover"}}/> : <div>No photo</div>}
+      </div>
+      <div className="card-body">
+        <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", gap:8}}>
+          <div className="badge">{item.category}</div>
+          {isAuction
+            ? <div className="badge">AUCTION · {timeLeft(item.endsAt)}</div>
+            : <div className="badge" style={{background:"rgba(34,197,94,.12)", borderColor:"rgba(34,197,94,.3)", color:"#a6ffbf"}}>BUY NOW</div>}
+        </div>
+
+        <h4 style={{margin:"10px 0 6px"}}>{item.title}</h4>
+        <div style={{color:"var(--muted)", fontSize:14}}>
+          {item.sellerMasked ? `by ${item.sellerMasked}` : ""}
+        </div>
+
+        {item.category === "Housing" && item.housing && (
+          <div style={{marginTop:8, fontSize:14, color:"var(--muted)"}}>
+            <strong>Rent:</strong> {formatCurrency(item.housing.rent)} · <strong>{item.housing.kind}</strong> · {item.housing.bath} · {item.housing.roommate}
+          </div>
+        )}
+      </div>
+      <div className="cta-bar">
+        {isAuction ? (
+          <>
+            <button className="btn" style={{flex:1}}>Place bid</button>
+          </>
+        ) : (
+          <button className="btn-primary" style={{flex:1}}>Buy now</button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ------------------ UI: Auth ------------------ */
+function AuthCard({ onBack }: { onBack: ()=>void }) {
+  const [tab, setTab] = useState<"login"|"register">("login");
+  return (
+    <div className="container section" style={{display:"grid", placeItems:"center"}}>
+      <div style={{marginBottom:12}}>
+        <button className="pill" onClick={onBack}>← Back to Home</button>
+      </div>
+      <div className="glass" style={{width:"min(520px, 96vw)", padding:18}}>
+        <div style={{display:"flex", gap:8, marginBottom:12}}>
+          <button className={"pill"} style={{background: tab==="login" ? "rgba(255,255,255,.12)" : ""}} onClick={()=>setTab("login")}>Log in</button>
+          <button className={"pill"} style={{background: tab==="register" ? "rgba(255,255,255,.12)" : ""}} onClick={()=>setTab("register")}>Create account</button>
+        </div>
+        <input className="input" placeholder="you@student.csulb.edu" />
+        <input className="input" type="password" placeholder="Password" />
+        <button className="btn-primary" style={{width:"100%", marginTop:8}}>
+          {tab==="login" ? "Continue" : "Register"}
+        </button>
+        <button className="btn" style={{width:"100%", marginTop:8}} onClick={()=>setTab(tab==="login"?"register":"login")}>
+          {tab==="login" ? "Need an account? Create one" : "Already have an account? Log in"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------ UI: New Listing Modal ------------------ */
+function NewListingModal({
+  onClose, onPublish
+}:{
+  onClose:()=>void;
+  onPublish:(item:Item)=>void;
+}) {
+  const [title, setTitle] = useState("");
+  const [type, setType] = useState<ListingType>("auction");
+  const [category, setCategory] = useState<Category>("Textbooks");
+  const [startingBid, setStartingBid] = useState<string>("");
+  const [price, setPrice] = useState<string>("");
+  const [image, setImage] = useState("");
+  const [durationHours, setDurationHours] = useState<number>(24);
+
+  // housing fields
+  const [rent, setRent] = useState<string>("");
+  const [hKind, setHKind] = useState<HousingKind>("Room (Private)");
+  const [hBath, setHBath] = useState<BathKind>("Shared Bath");
+  const [hRoommate, setHRoommate] = useState<RoommateIntent>("Looking for roommates");
+  const [hLink, setHLink] = useState("");
+
+  const isAuction = type === "auction";
+  const isHousing = category === "Housing";
+
+  function publish(){
+    const id = Math.random().toString(36).slice(2,9);
+    const base: Item = {
+      id, title: title.trim() || "Untitled",
+      category,
+      type,
+      image,
+      sellerMasked: maskEmail("se***@student.csulb.edu"),
+    };
+
+    if (isAuction) {
+      base.currentBid = Number(startingBid || 0);
+      base.endsAt = Date.now() + durationHours * 60 * 60 * 1000;
+    } else {
+      base.price = Number(price || 0);
+    }
+
+    if (isHousing) {
+      base.type = "buy";
+      base.price = Number(rent || 0);
+      base.housing = {
+        rent: Number(rent || 0),
+        kind: hKind,
+        bath: hBath,
+        roommate: hRoommate,
+        link: hLink || undefined,
+      };
+    }
+
+    onPublish(base);
+  }
+
+  return (
+    <div className="modal-card">
+      <div className="modal-head">
+        <h3 style={{margin:0}}>New listing</h3>
+        <button className="pill" onClick={onClose}>✕</button>
+      </div>
+
+      <div className="modal-body">
+        <div className="modal-grid">
+          <div>
+            <label>Title</label>
+            <input className="input" placeholder="e.g., CSULB hoodie (M)" value={title} onChange={e=>setTitle(e.target.value)} />
+          </div>
+
+          <div>
+            <label>Category</label>
+            <select className="select" value={category} onChange={e=>setCategory(e.target.value as Category)}>
+              {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+        </div>
+
+        {/* Type selector (disabled for Housing) */}
+        <div style={{display:"flex", gap:8, alignItems:"center"}}>
+          <div style={{fontWeight:800}}>Type</div>
+          <button className="pill" onClick={()=>setType("auction")}
+                  style={{background: type==="auction" ? "rgba(255,255,255,.15)" : "", opacity: isHousing? .4 : 1}}
+                  disabled={isHousing}>
+            Auction
+          </button>
+          <button className="pill" onClick={()=>setType("buy")}
+                  style={{background: type==="buy" ? "rgba(255,255,255,.15)" : "", opacity: isHousing? .4 : 1}}
+                  disabled={isHousing}>
+            Buy now
+          </button>
+        </div>
+
+        {/* Price / bid row */}
+        {!isHousing && (
+          <div className="modal-grid">
+            {isAuction ? (
+              <>
+                <div>
+                  <label>Starting bid (USD)</label>
+                  <input className="input" inputMode="numeric" placeholder="0" value={startingBid} onChange={e=>setStartingBid(e.target.value)} />
+                </div>
+                <div>
+                  <label>Duration (hours)</label>
+                  <input className="input" inputMode="numeric" placeholder="24" value={durationHours}
+                         onChange={e=>setDurationHours(Number(e.target.value||"0"))} />
+                </div>
+              </>
+            ) : (
+              <>
+                <div>
+                  <label>Price (USD)</label>
+                  <input className="input" inputMode="numeric" placeholder="0" value={price} onChange={e=>setPrice(e.target.value)} />
+                </div>
+                <div />
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Housing section */}
+        {isHousing && (
+          <>
+            <div className="glass" style={{padding:12}}>
+              <div style={{fontWeight:800, marginBottom:8}}>Housing details</div>
+              <div className="modal-grid">
+                <div>
+                  <label>Monthly Rent (USD)</label>
+                  <input className="input" inputMode="numeric" placeholder="e.g., 950" value={rent} onChange={e=>setRent(e.target.value)} />
+                </div>
+                <div>
+                  <label>Type</label>
+                  <select className="select" value={hKind} onChange={e=>setHKind(e.target.value as HousingKind)}>
+                    {["Studio","1BR","2BR","3BR+","Room (Private)","Room (Shared)"].map(v=> <option key={v} value={v}>{v}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div className="modal-grid">
+                <div>
+                  <label>Bathroom</label>
+                  <select className="select" value={hBath} onChange={e=>setHBath(e.target.value as BathKind)}>
+                    {["Private Bath","Shared Bath"].map(v=> <option key={v} value={v}>{v}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label>Roommates</label>
+                  <select className="select" value={hRoommate} onChange={e=>setHRoommate(e.target.value as RoommateIntent)}>
+                    {["Looking for roommates","Private place","Either"].map(v=> <option key={v} value={v}>{v}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label>More info link (optional)</label>
+                <input className="input" placeholder="https://…" value={hLink} onChange={e=>setHLink(e.target.value)} />
+              </div>
+            </div>
+          </>
+        )}
+
+        <div>
+          <label>Photo URL (optional)</label>
+          <input className="input" placeholder="https://…" value={image} onChange={e=>setImage(e.target.value)} />
+        </div>
+      </div>
+
+      <div className="modal-foot">
+        <button className="btn" onClick={onClose}>Cancel</button>
+        <button className="btn-primary" onClick={publish}>Publish</button>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------ Legal copy (minimal, protective, anonymous) ------------------ */
+const TERMS_TXT = `
+CSULB Marketplace — Terms of Use
+
+1) Student-run project (not affiliated with or endorsed by CSULB).
+2) You must be a current student to post or transact. You are solely responsible for your listings, communications, and meet-ups.
+3) No payments handled by this site. All transactions happen off-platform at your own risk. Meet in public places on campus.
+4) Prohibited: illegal items, weapons, drugs, stolen goods, impersonation, harassment.
+5) We may remove content, restrict access, or terminate use at our discretion.
+6) THE SERVICE IS PROVIDED “AS IS” WITHOUT WARRANTIES. We are not liable for any damages arising out of use.
+7) By using the site you agree to these terms and all posted rules.`;
+
+const PRIVACY_TXT = `
+CSULB Marketplace — Privacy Notice
+
+- This site stores basic listing data in your browser (localStorage) for demo purposes.
+- We do not sell personal data. If you email us, we will use your email only to reply to you.
+- No payments are processed here. Do not share sensitive info on the site.
+- You can request deletion of your messages or content by contacting csulbmarketplace@gmail.com.
+- This student-run project is not affiliated with CSULB.
+`;
