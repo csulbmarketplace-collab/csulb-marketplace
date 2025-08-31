@@ -1,126 +1,110 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import "./styles.css";
 
-/* -------------------- Helpers & Demo Data -------------------- */
-type Listing = {
+/** ---------------------------
+ *  Tiny hash router
+ * --------------------------*/
+type Route = "home" | "explore" | "auth" | "terms" | "privacy";
+function useRoute(): [Route, (r: Route) => void] {
+  const parse = (): Route => {
+    const h = location.hash.replace("#/", "");
+    return (["home","explore","auth","terms","privacy"].includes(h) ? (h as Route) : "home");
+  };
+  const [route, setRoute] = useState<Route>(parse());
+  useEffect(() => {
+    const onHash = () => setRoute(parse());
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+  const nav = (r: Route) => {
+    if (r === "home") location.hash = "/home";
+    else location.hash = `/${r}`;
+  };
+  return [route, nav];
+}
+
+/** ---------------------------
+ *  Fake auth (localStorage)
+ * --------------------------*/
+const LS_USER = "cm_user";
+const LS_ACCTS = "cm_accounts";
+function useAuth() {
+  const [user, setUser] = useState<{email:string}|null>(() => {
+    try { const raw = localStorage.getItem(LS_USER); return raw ? JSON.parse(raw) : null; } catch {return null}
+  });
+  function login(email: string) {
+    const u = {email};
+    localStorage.setItem(LS_USER, JSON.stringify(u));
+    setUser(u);
+  }
+  function logout() {
+    localStorage.removeItem(LS_USER);
+    setUser(null);
+  }
+  function register(email: string, pass: string) {
+    const accts = JSON.parse(localStorage.getItem(LS_ACCTS) || "{}");
+    if (accts[email]) throw new Error("Account already exists");
+    accts[email] = pass;
+    localStorage.setItem(LS_ACCTS, JSON.stringify(accts));
+    login(email);
+  }
+  function check(email: string, pass: string) {
+    const accts = JSON.parse(localStorage.getItem(LS_ACCTS) || "{}");
+    if (!accts[email] || accts[email] !== pass) throw new Error("Invalid credentials");
+    login(email);
+  }
+  return { user, login, logout, register, check };
+}
+
+/** ---------------------------
+ *  Data (demo)
+ * --------------------------*/
+type Item = {
   id: string;
   title: string;
-  category: string;
+  img?: string;
   type: "auction" | "buy";
-  price: number;
-  highestBid?: number;
-  image: string;
+  price?: string;
+  bid?: string;
+  timeLeft?: string;
+  category: string;
   seller: string;
-  endsInHrs?: number;
 };
-
-const DEMO_LISTINGS: Listing[] = [
-  {
-    id: "l1",
-    title: "MATH 123 Textbook (Like New)",
-    category: "Textbooks",
-    type: "auction",
-    price: 18,
-    highestBid: 18,
-    image:
-      "https://images.unsplash.com/photo-1519681393784-d120267933ba?q=80&w=1600&auto=format&fit=crop",
-    seller: "se***@student.csulb.edu",
-    endsInHrs: 26,
-  },
-  {
-    id: "l2",
-    title: "Mini Fridge (Dorm Friendly)",
-    category: "Dorm & Furniture",
-    type: "buy",
-    price: 70,
-    image:
-      "https://images.unsplash.com/photo-1616596872053-6d3b5a7d1b00?q=80&w=1600&auto=format&fit=crop",
-    seller: "by***@student.csulb.edu",
-  },
-  {
-    id: "l3",
-    title: "Electric Scooter",
-    category: "Bikes & Scooters",
-    type: "auction",
-    price: 110,
-    highestBid: 110,
-    image:
-      "https://images.unsplash.com/photo-1558981033-0fceb362e2e6?q=80&w=1600&auto=format&fit=crop",
-    seller: "se***@student.csulb.edu",
-    endsInHrs: 5.9,
-  },
-  {
-    id: "l4",
-    title: "CSULB Hoodie (M)",
-    category: "Clothing",
-    type: "buy",
-    price: 25,
-    image:
-      "https://images.unsplash.com/photo-1556909114-514a4290f9a0?q=80&w=1600&auto=format&fit=crop",
-    seller: "mi***@student.csulb.edu",
-  },
-  {
-    id: "l5",
-    title: "IKEA Desk + Chair Set",
-    category: "Dorm & Furniture",
-    type: "auction",
-    price: 62,
-    highestBid: 62,
-    image:
-      "https://images.unsplash.com/photo-1582582494700-5d5a9e3cd908?q=80&w=1600&auto=format&fit=crop",
-    seller: "ab***@student.csulb.edu",
-    endsInHrs: 14,
-  },
-  {
-    id: "l6",
-    title: "TI-84 Calculator",
-    category: "Electronics",
-    type: "buy",
-    price: 45,
-    image:
-      "https://images.unsplash.com/photo-1518779578993-ec3579fee39f?q=80&w=1600&auto=format&fit=crop",
-    seller: "jo***@student.csulb.edu",
-  },
+const DEMO: Item[] = [
+  { id:"1", title:"MATH 123 Textbook (Like New)", img:"https://images.unsplash.com/photo-1451933335233-cf0db9c7e91f?q=80&w=1200&auto=format&fit=crop", type:"auction", bid:"$18.00", timeLeft:"26h left", category:"Textbooks", seller:"se***@student.csulb.edu" },
+  { id:"2", title:"Mini Fridge (Dorm Friendly)", img:"", type:"buy", price:"$70.00", category:"Dorm & Furniture", seller:"by***@student.csulb.edu" },
+  { id:"3", title:"Electric Scooter", img:"", type:"auction", bid:"$110.00", timeLeft:"5.9h left", category:"Bikes & Scooters", seller:"se***@student.csulb.edu" },
+  { id:"4", title:"CSULB Hoodie (M)", img:"", type:"buy", price:"$25.00", category:"Clothing", seller:"mi***@student.csulb.edu" },
+  { id:"5", title:"IKEA Desk + Chair Set", img:"", type:"auction", bid:"$62.00", timeLeft:"14h left", category:"Dorm & Furniture", seller:"ab***@student.csulb.edu" },
+  { id:"6", title:"TI-84 Calculator", img:"https://images.unsplash.com/photo-1515879218367-8466d910aaa4?q=80&w=1200&auto=format&fit=crop", type:"buy", price:"$45.00", category:"Electronics", seller:"jo***@student.csulb.edu" },
 ];
 
-/* -------------------- Header & Footer -------------------- */
-function Header({
-  onHome,
-  onExplore,
-  onSignIn,
-  user,
-  onLogout,
-}: {
-  onHome: () => void;
-  onExplore: () => void;
-  onSignIn: () => void;
-  user: { email: string } | null;
-  onLogout: () => void;
-}) {
+/** ---------------------------
+ *  UI Helpers
+ * --------------------------*/
+function Brand({onHome}:{onHome:()=>void}){
+  return (
+    <button className="brand" onClick={onHome} aria-label="Go home">
+      <span className="brand-badge">🏠</span>
+      CSULB Marketplace
+    </button>
+  );
+}
+function Nav({user, onExplore, onAuth, onLogout}:{user:{email:string}|null,onExplore:()=>void,onAuth:()=>void,onLogout:()=>void}){
   return (
     <div className="topbar">
       <div className="container topbar-wrap">
-        <button onClick={onHome} className="brand" style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}>
-          <div className="brand-badge">△</div>
-          CSULB Marketplace
-        </button>
-
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <button className="btn" onClick={onExplore}>
-            Explore
-          </button>
+        <Brand onHome={()=>location.hash="/home"} />
+        {/* Desktop actions */}
+        <div className="nav-actions hide-mobile">
+          <button className="btn" onClick={onExplore}>Explore</button>
           {user ? (
             <>
-              <span className="kicker small" style={{ opacity: 0.9 }}>
-                {user.email}
-              </span>
-              <button className="btn" onClick={onLogout}>
-                Log out
-              </button>
+              <span className="small" aria-label="Logged in email">{user.email}</span>
+              <button className="btn" onClick={onLogout}>Log out</button>
             </>
           ) : (
-            <button className="btn" onClick={onSignIn}>
-              Sign in
-            </button>
+            <button className="btn btn-primary" onClick={onAuth}>Sign in</button>
           )}
         </div>
       </div>
@@ -128,240 +112,264 @@ function Header({
   );
 }
 
-function Footer() {
+/** ---------------------------
+ *  Pages
+ * --------------------------*/
+function Home({onSignIn,onExplore}:{onSignIn:()=>void,onExplore:()=>void}){
+  return (
+    <section className="section">
+      <div className="container">
+        <div className="glass hero-card">
+          <h1 className="h1">Buy & sell on campus — safely, fast, and student-only</h1>
+          <p className="lead">Auctions and buy-now listings, verified with <strong>@csulb.edu</strong>.</p>
+          {/* Desktop hero CTAs */}
+          <div className="hide-mobile" style={{display:"flex",gap:10}}>
+            <button className="btn btn-primary btn-lg" onClick={onSignIn}>Sign in</button>
+            <button className="btn btn-lg" onClick={onExplore}>Explore marketplace</button>
+          </div>
+        </div>
+
+        <div className="center mt-24 small">
+          🔧 Work in progress — launching soon. • Feedback: <a href="mailto:csulbmarketplace@gmail.com">csulbmarketplace@gmail.com</a>
+        </div>
+
+        {/* Mobile sticky — single clean action row (no duplicates) */}
+        <div className="stickyCta show-mobile">
+          <div className="container">
+            <div className="stickyBar">
+              <button className="btn btn-primary btn-block" onClick={onSignIn}>Sign in</button>
+              <button className="btn btn-block" onClick={onExplore}>Explore</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function Filters({ value, onChange }:{ value:"all"|"auction"|"buy", onChange:(v:"all"|"auction"|"buy")=>void }){
+  return (
+    <div className="explore-filters container">
+      {(["all","auction","buy"] as const).map(v=>(
+        <button
+          key={v}
+          className={`chip ${value===v?'active':''}`}
+          aria-pressed={value===v}
+          onClick={()=>onChange(v)}
+        >
+          {v==='all'?'All':v==='auction'?'Auctions':'Buy Now'}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function ListingCard({item}:{item:Item}){
+  const primaryLabel = item.type==='auction' ? 'Place bid' : 'Buy now';
+  return (
+    <article className="card glass" role="article" aria-label={item.title}>
+      <div className="card-media">
+        {item.img ? <img src={item.img} loading="lazy" alt={item.title}/> : <div className="ph" aria-hidden/>}
+      </div>
+      <div className="card-body">
+        <h3 className="card-title">{item.title}</h3>
+        <div className="small">{item.category} • by {item.seller}</div>
+        <div className="badges mt-12">
+          {item.type==='auction' && <span className="badge badge-auction">AUCTION</span>}
+          {item.type==='buy'     && <span className="badge badge-buynow">BUY NOW</span>}
+          {item.type==='auction' && <span className="badge badge-time">{item.timeLeft}</span>}
+        </div>
+        <div className="card-price">
+          {item.type==='auction' ? <>Current bid: <strong>{item.bid}</strong></> : <>Price: <strong>{item.price}</strong></>}
+        </div>
+        <div className="card-ctas">
+          <button className="btn-primary" aria-label={`${primaryLabel} for ${item.title}`}>{primaryLabel}</button>
+          <button className="btn">Details</button>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function Explore(){
+  const [filter, setFilter] = useState<"all"|"auction"|"buy">("all");
+  const items = useMemo(()=>DEMO.filter(i => filter==='all' ? true : (filter==='buy' ? i.type==='buy' : i.type==='auction')), [filter]);
+  return (
+    <section className="section">
+      <div className="container">
+        <div style={{display:"flex",alignItems:"center",gap:10, marginBottom:10}}>
+          <a className="btn" href="#/home">← Home</a>
+          <h2 className="h2" style={{margin:0}}>Explore</h2>
+        </div>
+
+        <Filters value={filter} onChange={setFilter} />
+
+        {items.length ? (
+          <div className="cards">
+            {items.map(i => <ListingCard key={i.id} item={i} />)}
+          </div>
+        ) : (
+          <div className="glass" style={{padding:18}}>
+            <strong>No listings yet.</strong> Be the first to post! (Demo)
+          </div>
+        )}
+      </div>
+
+      {/* Mobile sticky actions - only Explore */}
+      <div className="stickyCta show-mobile">
+        <div className="container">
+          <div className="stickyBar">
+            <a className="btn btn-block" href="#/home">Home</a>
+            <button className="btn btn-primary btn-block">+ New listing</button>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function Auth({ onClose, auth }:{ onClose:()=>void, auth: ReturnType<typeof useAuth> }){
+  const [isReg, setIsReg] = useState(false);
+  const [email, setEmail] = useState("");
+  const [pass, setPass] = useState("");
+  const [err, setErr] = useState("");
+
+  function submit(){
+    setErr("");
+    try{
+      if(isReg) auth.register(email, pass);
+      else auth.check(email, pass);
+      onClose();
+    }catch(e:any){ setErr(e.message || "Error"); }
+  }
+
+  return (
+    <section className="section authWrap">
+      <div className="small center" style={{marginBottom:12}}>
+        <a className="btn" href="#/home">← Back to Home</a>
+      </div>
+      <div className="glass authCard">
+        <div style={{display:"flex",gap:8, justifyContent:"center", marginBottom:12}}>
+          <button className={`btn ${!isReg?'btn-primary':''}`} onClick={()=>setIsReg(false)}>Log in</button>
+          <button className={`btn ${isReg?'btn-primary':''}`} onClick={()=>setIsReg(true)}>Create account</button>
+        </div>
+        <input className="input" placeholder="you@student.csulb.edu" value={email} onChange={e=>setEmail(e.target.value)} />
+        <div className="mt-12" />
+        <input className="input" placeholder="Password" type="password" value={pass} onChange={e=>setPass(e.target.value)} />
+        {err && <div className="small" style={{color:"#ffb4c2", marginTop:8}}>{err}</div>}
+        <div className="mt-12" />
+        <button className="btn-primary btn-block" onClick={submit}>{isReg ? "Register" : "Continue"}</button>
+        <div className="mt-12" />
+        <button className="btn btn-block" onClick={()=>setIsReg(!isReg)}>
+          {isReg ? "Already have an account? Log in" : "Need an account? Create one"}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+/** ---------------------------
+ *  Legal pages
+ * --------------------------*/
+function TermsPage(){
+  return (
+    <section className="section">
+      <div className="container glass" style={{padding:22, maxWidth:980, marginInline:"auto"}}>
+        <h2 className="h2">Terms of Use</h2>
+        <p className="small">Last updated: Aug 31, 2025</p>
+        <p>
+          CSULB Marketplace is a student-made website operated independently by a CSULB student (<strong>IB</strong>). 
+          We are <strong>not affiliated with, endorsed by, or sponsored by CSU Long Beach</strong>. By using this site,
+          you agree to these Terms.
+        </p>
+        <ol>
+          <li><strong>Eligibility.</strong> This site is intended for CSULB students. Account access may require a CSULB email.</li>
+          <li><strong>No payments handled.</strong> We do not process payments or hold funds. All transactions are between users.</li>
+          <li><strong>Safety.</strong> Meet in public places on campus (e.g., USU or Library). Inspect items in person. Do not share sensitive info.</li>
+          <li><strong>Prohibited content.</strong> No illegal items, weapons, drugs, stolen goods, counterfeit goods, or academic dishonesty services.</li>
+          <li><strong>User content.</strong> You are responsible for the accuracy of your listings. We may remove content that violates these Terms.</li>
+          <li><strong>Disclaimer.</strong> The service is provided “as is” without warranties. We do not guarantee availability, quality, or safety of items or users.</li>
+          <li><strong>Limitation of liability.</strong> To the maximum extent permitted by law, we are not liable for indirect, incidental, special, or consequential damages, or any loss arising from transactions between users.</li>
+          <li><strong>Indemnity.</strong> You agree to indemnify and hold us harmless from claims arising out of your use, listings, or violations of these Terms.</li>
+          <li><strong>Enforcement & takedown.</strong> We may suspend accounts, remove content, or cooperate with lawful requests.</li>
+          <li><strong>Governing law & venue.</strong> California law governs. Any disputes shall be resolved in Los Angeles County, CA, or small claims court as appropriate.</li>
+          <li><strong>Changes.</strong> We may update these Terms; continued use constitutes acceptance.</li>
+          <li><strong>Contact.</strong> csulbmarketplace@gmail.com</li>
+        </ol>
+        <div className="mt-16" />
+        <a className="btn" href="#/home">← Back</a>
+      </div>
+    </section>
+  );
+}
+
+function PrivacyPage(){
+  return (
+    <section className="section">
+      <div className="container glass" style={{padding:22, maxWidth:980, marginInline:"auto"}}>
+        <h2 className="h2">Privacy Policy</h2>
+        <p className="small">Last updated: Aug 31, 2025</p>
+        <p>
+          This site collects the minimum information needed to operate (e.g., your email for account access). 
+          We store basic account data in your browser and our site storage. We do not sell your data.
+        </p>
+        <ul>
+          <li><strong>Account data.</strong> Email and a hashed password (for the real launch; demo stores locally). You may request deletion.</li>
+          <li><strong>Usage.</strong> We may collect non-identifying analytics (e.g., page views) to improve the site.</li>
+          <li><strong>Security.</strong> No system is 100% secure. Do not reuse passwords. Report issues to csulbmarketplace@gmail.com.</li>
+          <li><strong>Third-party links.</strong> External sites have their own policies; we are not responsible for them.</li>
+          <li><strong>Children.</strong> This site is intended for university-age users.</li>
+          <li><strong>Changes.</strong> We may update this policy; continued use constitutes acceptance.</li>
+        </ul>
+        <p className="small">Student-made website by <strong>IB</strong>. Not affiliated with CSULB.</p>
+        <div className="mt-16" />
+        <a className="btn" href="#/home">← Back</a>
+      </div>
+    </section>
+  );
+}
+
+/** ---------------------------
+ *  Footer
+ * --------------------------*/
+function Footer(){
   return (
     <footer className="footer">
-      <div className="container" style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-        <div>© {new Date().getFullYear()} CSULB Marketplace • Not affiliated with CSULB</div>
-        <div style={{ display: "flex", gap: 14 }}>
-          <a href="#" className="kicker">Terms</a>
-          <a href="#" className="kicker">Privacy</a>
-          <a href="mailto:csulbmarketplace@gmail.com" className="kicker">Contact</a>
-        </div>
+      <div className="container" style={{display:"flex",justifyContent:"center",gap:18,flexWrap:"wrap"}}>
+        <span>© 2025 CSULB Marketplace • Not affiliated with CSULB • Student-made by <strong>IB</strong></span>
+        <a href="#/terms">Terms</a>
+        <a href="#/privacy">Privacy</a>
+        <a href="mailto:csulbmarketplace@gmail.com">Contact</a>
       </div>
     </footer>
   );
 }
 
-/* -------------------- Pages -------------------- */
-function HomeLanding({ onSignIn, onExplore }: { onSignIn: () => void; onExplore: () => void }) {
-  return (
-    <section className="section hero">
-      <div className="container">
-        <div className="glass" style={{ padding: "clamp(18px,4vw,36px)" }}>
-          <h1 className="h1">Buy & sell on campus — safely, fast, and student-only</h1>
-          <p className="lead">
-            Auctions and buy-now listings, verified with <strong>@csulb.edu</strong>.
-          </p>
-          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-            <button className="btn-primary btn-lg" onClick={onSignIn}>Sign in</button>
-            <button className="btn btn-lg" onClick={onExplore}>Explore marketplace</button>
-          </div>
-        </div>
-
-        <div className="section center footer-note">
-          🚧 <strong>Work in progress</strong> — launching soon. <br />
-          Feedback • csulbmarketplace@gmail.com
-        </div>
-
-        {/* Mobile sticky CTA */}
-        <div className="stickyCta">
-          <div className="stickyBar">
-            <button className="btn-primary btn-block" onClick={onSignIn}>Sign in</button>
-            <button className="btn btn-block" onClick={onExplore}>Explore</button>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function AuthGate({
-  onLogin,
-  onBack,
-}: {
-  onLogin: (u: { email: string }) => void;
-  onBack: () => void;
-}) {
-  const [mode, setMode] = useState<"login" | "register">("login");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [accounts, setAccounts] = useState<{ [k: string]: string }>({});
-  const [error, setError] = useState("");
-
-  function submit() {
-    setError("");
-    if (mode === "register") {
-      if (accounts[email]) {
-        setError("Account already exists");
-        return;
-      }
-      setAccounts({ ...accounts, [email]: password });
-      onLogin({ email });
-    } else {
-      if (accounts[email] && accounts[email] === password) {
-        onLogin({ email });
-      } else {
-        setError("Invalid email or password");
-      }
-    }
-  }
-
-  // segmented underline width/position
-  const indStyle: React.CSSProperties =
-    mode === "login"
-      ? { width: 56, transform: "translateX(6px)" }
-      : { width: 128, transform: "translateX(66px)" };
-
-  return (
-    <section className="section authWrap">
-      <div className="container" style={{ maxWidth: 520, padding: 0 }}>
-        <button className="btn" onClick={onBack} style={{ width: "auto", padding: "8px 12px", marginBottom: 12 }}>
-          ← Back to Home
-        </button>
-      </div>
-
-      <div className="glass authCard">
-        <div className="center">
-          <div className="tabs">
-            <div className="seg-indicator" style={indStyle} />
-            <button className={`tab ${mode === "login" ? "active" : ""}`} onClick={() => setMode("login")}>
-              Log in
-            </button>
-            <button className={`tab ${mode === "register" ? "active" : ""}`} onClick={() => setMode("register")}>
-              Create account
-            </button>
-          </div>
-        </div>
-
-        <div style={{ marginTop: 16 }} />
-        <input className="input" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@student.csulb.edu" />
-        <div style={{ height: 12 }} />
-        <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" />
-
-        {error && <div style={{ color: "#ffb4b4", marginTop: 10, fontWeight: 700 }}>{error}</div>}
-
-        <div style={{ height: 14 }} />
-        <button className="btn-primary btn-lg btn-block" onClick={submit}>
-          {mode === "login" ? "Continue" : "Register"}
-        </button>
-        <div style={{ height: 8 }} />
-        <button className="btn btn-lg btn-block" onClick={() => setMode(mode === "login" ? "register" : "login")}>
-          {mode === "login" ? "Need an account? Create one" : "Have an account? Log in"}
-        </button>
-      </div>
-    </section>
-  );
-}
-
-function ExplorePage({
-  listings,
-  onBackHome,
-}: {
-  listings: Listing[];
-  onBackHome: () => void;
-}) {
-  const [filter, setFilter] = useState<"all" | "auction" | "buy">("all");
-  const filtered = useMemo(
-    () => listings.filter((l) => (filter === "all" ? true : filter === "auction" ? l.type === "auction" : l.type === "buy")),
-    [filter, listings]
-  );
-
-  return (
-    <section className="section">
-      <div className="container">
-        <div className="toolbar">
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <button className="btn" onClick={onBackHome}>← Home</button>
-            <h2 className="h1" style={{ fontSize: 28, margin: 0 }}>Explore</h2>
-          </div>
-
-          <div className="filterGroup">
-            <button className={`badge ${filter === "all" ? "active" : ""}`} onClick={() => setFilter("all")}>All</button>
-            <button className={`badge ${filter === "auction" ? "active" : ""}`} onClick={() => setFilter("auction")}>Auctions</button>
-            <button className={`badge ${filter === "buy" ? "active" : ""}`} onClick={() => setFilter("buy")}>Buy Now</button>
-          </div>
-        </div>
-
-        <div className="grid">
-          {filtered.map((l) => (
-            <div key={l.id} className="card">
-              <img src={l.image} alt={l.title} />
-              <div className="card-body">
-                <div className="card-title">{l.title}</div>
-                <div className="kicker">{l.category} • by {l.seller}</div>
-
-                <div className="priceRow">
-                  {l.type === "auction" ? (
-                    <>
-                      <div><strong>Current bid:</strong> ${l.highestBid?.toFixed(2)}</div>
-                      <span className="pill auction">AUCTION {l.endsInHrs ? `• ${l.endsInHrs}h left` : ""}</span>
-                    </>
-                  ) : (
-                    <>
-                      <div><strong>Price:</strong> ${l.price.toFixed(2)}</div>
-                      <span className="pill buynow">BUY NOW</span>
-                    </>
-                  )}
-                </div>
-
-                <div className="ctaRow">
-                  {l.type === "auction" ? (
-                    <>
-                      <button className="btn-primary btn-block">Place bid</button>
-                    </>
-                  ) : (
-                    <>
-                      <button className="btn-primary btn-block">Buy now</button>
-                    </>
-                  )}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {filtered.length === 0 && (
-          <div className="center mt-24 kicker">No results found.</div>
-        )}
-      </div>
-    </section>
-  );
-}
-
-/* -------------------- App Root -------------------- */
-export default function App() {
-  const [user, setUser] = useState<{ email: string } | null>(null);
-  const [page, setPage] = useState<"home" | "auth" | "explore">("home");
-
-  function logout() {
-    setUser(null);
-    setPage("home");
-  }
+/** ---------------------------
+ *  App
+ * --------------------------*/
+export default function App(){
+  const [route, nav] = useRoute();
+  const auth = useAuth();
 
   return (
     <>
-      <Header
-        onHome={() => setPage("home")}
-        onExplore={() => setPage("explore")}
-        onSignIn={() => setPage("auth")}
-        user={user}
-        onLogout={logout}
+      <Nav
+        user={auth.user}
+        onExplore={()=>nav("explore")}
+        onAuth={()=>nav("auth")}
+        onLogout={auth.logout}
       />
 
-      {page === "home" && <HomeLanding onSignIn={() => setPage("auth")} onExplore={() => setPage("explore")} />}
+      {route==="home"    && <Home onSignIn={()=>nav("auth")} onExplore={()=>nav("explore")} />}
+      {route==="explore" && <Explore />}
+      {route==="auth"    && <Auth onClose={()=>nav("home")} auth={auth} />}
+      {route==="terms"   && <TermsPage />}
+      {route==="privacy" && <PrivacyPage />}
 
-      {page === "auth" && (
-        <AuthGate
-          onLogin={(u) => {
-            setUser(u);
-            setPage("explore");
-          }}
-          onBack={() => setPage("home")}
-        />
-      )}
-
-      {page === "explore" && <ExplorePage listings={DEMO_LISTINGS} onBackHome={() => setPage("home")} />}
+      <div className="container center small mt-24">
+        🔒 Be smart & safe: meet in public areas on campus (USU / Library).
+      </div>
 
       <Footer />
     </>
