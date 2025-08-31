@@ -14,12 +14,10 @@ function useRoute(): [Route, (r: Route) => void] {
   useEffect(() => {
     const onHash = () => setRoute(parse());
     window.addEventListener("hashchange", onHash);
+    if (!location.hash) location.hash = "/home";
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
-  const nav = (r: Route) => {
-    if (r === "home") location.hash = "/home";
-    else location.hash = `/${r}`;
-  };
+  const nav = (r: Route) => (location.hash = `/${r}`);
   return [route, nav];
 }
 
@@ -57,7 +55,7 @@ function useAuth() {
 }
 
 /** ---------------------------
- *  Data (demo)
+ *  Items store (localStorage)
  * --------------------------*/
 type Item = {
   id: string;
@@ -78,6 +76,22 @@ const DEMO: Item[] = [
   { id:"5", title:"IKEA Desk + Chair Set", img:"", type:"auction", bid:"$62.00", timeLeft:"14h left", category:"Dorm & Furniture", seller:"ab***@student.csulb.edu" },
   { id:"6", title:"TI-84 Calculator", img:"https://images.unsplash.com/photo-1515879218367-8466d910aaa4?q=80&w=1200&auto=format&fit=crop", type:"buy", price:"$45.00", category:"Electronics", seller:"jo***@student.csulb.edu" },
 ];
+const LS_ITEMS = "cm_items";
+function useItems(){
+  const [items, setItems] = useState<Item[]>(()=>{
+    try{
+      const raw = localStorage.getItem(LS_ITEMS);
+      if (raw) return JSON.parse(raw);
+    }catch{}
+    return DEMO;
+  });
+  useEffect(()=>{ localStorage.setItem(LS_ITEMS, JSON.stringify(items)); },[items]);
+  function add(item: Omit<Item,"id">){
+    const id = String(Date.now());
+    setItems(prev => [{...item, id}, ...prev]);
+  }
+  return {items, add};
+}
 
 /** ---------------------------
  *  UI Helpers
@@ -85,12 +99,14 @@ const DEMO: Item[] = [
 function Brand({onHome}:{onHome:()=>void}){
   return (
     <button className="brand" onClick={onHome} aria-label="Go home">
-      <span className="brand-badge">🏠</span>
+      <span className="brand-badge"><span>▲</span></span>
       CSULB Marketplace
     </button>
   );
 }
-function Nav({user, onExplore, onAuth, onLogout}:{user:{email:string}|null,onExplore:()=>void,onAuth:()=>void,onLogout:()=>void}){
+function Nav({
+  user, onExplore, onAuth, onLogout, onNew
+}:{user:{email:string}|null,onExplore:()=>void,onAuth:()=>void,onLogout:()=>void,onNew:()=>void}){
   return (
     <div className="topbar">
       <div className="container topbar-wrap">
@@ -100,6 +116,7 @@ function Nav({user, onExplore, onAuth, onLogout}:{user:{email:string}|null,onExp
           <button className="btn" onClick={onExplore}>Explore</button>
           {user ? (
             <>
+              <button className="btn btn-primary" onClick={onNew}>+ New listing</button>
               <span className="small" aria-label="Logged in email">{user.email}</span>
               <button className="btn" onClick={onLogout}>Log out</button>
             </>
@@ -133,7 +150,7 @@ function Home({onSignIn,onExplore}:{onSignIn:()=>void,onExplore:()=>void}){
           🔧 Work in progress — launching soon. • Feedback: <a href="mailto:csulbmarketplace@gmail.com">csulbmarketplace@gmail.com</a>
         </div>
 
-        {/* Mobile sticky — single clean action row (no duplicates) */}
+        {/* Mobile sticky — single clean action row */}
         <div className="stickyCta show-mobile">
           <div className="container">
             <div className="stickyBar">
@@ -191,9 +208,9 @@ function ListingCard({item}:{item:Item}){
   );
 }
 
-function Explore(){
+function Explore({items}:{items:Item[]}){
   const [filter, setFilter] = useState<"all"|"auction"|"buy">("all");
-  const items = useMemo(()=>DEMO.filter(i => filter==='all' ? true : (filter==='buy' ? i.type==='buy' : i.type==='auction')), [filter]);
+  const filtered = useMemo(()=>items.filter(i => filter==='all' ? true : (filter==='buy' ? i.type==='buy' : i.type==='auction')), [filter, items]);
   return (
     <section className="section">
       <div className="container">
@@ -204,9 +221,9 @@ function Explore(){
 
         <Filters value={filter} onChange={setFilter} />
 
-        {items.length ? (
+        {filtered.length ? (
           <div className="cards">
-            {items.map(i => <ListingCard key={i.id} item={i} />)}
+            {filtered.map(i => <ListingCard key={i.id} item={i} />)}
           </div>
         ) : (
           <div className="glass" style={{padding:18}}>
@@ -292,7 +309,7 @@ function TermsPage(){
           <li><strong>Limitation of liability.</strong> To the maximum extent permitted by law, we are not liable for indirect, incidental, special, or consequential damages, or any loss arising from transactions between users.</li>
           <li><strong>Indemnity.</strong> You agree to indemnify and hold us harmless from claims arising out of your use, listings, or violations of these Terms.</li>
           <li><strong>Enforcement & takedown.</strong> We may suspend accounts, remove content, or cooperate with lawful requests.</li>
-          <li><strong>Governing law & venue.</strong> California law governs. Any disputes shall be resolved in Los Angeles County, CA, or small claims court as appropriate.</li>
+          <li><strong>Governing law & venue.</strong> California law governs. Any disputes shall be resolved in Los Angeles County, CA.</li>
           <li><strong>Changes.</strong> We may update these Terms; continued use constitutes acceptance.</li>
           <li><strong>Contact.</strong> csulbmarketplace@gmail.com</li>
         </ol>
@@ -330,6 +347,94 @@ function PrivacyPage(){
 }
 
 /** ---------------------------
+ *  New Listing (modal)
+ * --------------------------*/
+function NewListingModal({
+  onClose, onCreate, seller
+}:{onClose:()=>void,onCreate:(i:Omit<Item,"id">)=>void,seller:string}){
+  const [title, setTitle] = useState("");
+  const [type, setType] = useState<"auction"|"buy">("auction");
+  const [price, setPrice] = useState("");
+  const [bid, setBid] = useState("");
+  const [timeLeft, setTimeLeft] = useState("24h left");
+  const [category, setCategory] = useState("Misc");
+  const [img, setImg] = useState("");
+
+  function submit(){
+    if(!title.trim()) return alert("Add a title");
+    if(type==="buy" && !price) return alert("Add a price");
+    if(type==="auction" && !bid) return alert("Add a starting bid");
+    onCreate({
+      title: title.trim(),
+      type,
+      price: type==="buy" ? `$${Number(price).toFixed(2)}` : undefined,
+      bid:   type==="auction" ? `$${Number(bid).toFixed(2)}`   : undefined,
+      timeLeft: type==="auction" ? timeLeft : undefined,
+      category,
+      img,
+      seller
+    });
+    onClose();
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={onClose} role="dialog" aria-modal="true">
+      <div className="modal" onClick={(e)=>e.stopPropagation()}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center", marginBottom:8}}>
+          <h3 className="h2" style={{margin:0}}>New listing</h3>
+          <button className="btn" onClick={onClose}>✕</button>
+        </div>
+
+        <div className="modal-grid">
+          <div>
+            <label className="small">Title</label>
+            <input className="input" value={title} onChange={e=>setTitle(e.target.value)} placeholder="e.g., CSULB hoodie (M)" />
+          </div>
+          <div>
+            <label className="small">Category</label>
+            <input className="input" value={category} onChange={e=>setCategory(e.target.value)} placeholder="e.g., Clothing" />
+          </div>
+          <div>
+            <label className="small">Type</label>
+            <div style={{display:"flex",gap:8}}>
+              <button className={`btn ${type==='auction'?'btn-primary':''}`} onClick={()=>setType("auction")}>Auction</button>
+              <button className={`btn ${type==='buy'?'btn-primary':''}`} onClick={()=>setType("buy")}>Buy now</button>
+            </div>
+          </div>
+          {type==="buy" ? (
+            <div>
+              <label className="small">Price (USD)</label>
+              <input className="input" type="number" min="0" step="0.01" value={price} onChange={e=>setPrice(e.target.value)} />
+            </div>
+          ) : (
+            <>
+              <div>
+                <label className="small">Starting bid (USD)</label>
+                <input className="input" type="number" min="0" step="0.01" value={bid} onChange={e=>setBid(e.target.value)} />
+              </div>
+              <div>
+                <label className="small">Duration</label>
+                <input className="input" value={timeLeft} onChange={e=>setTimeLeft(e.target.value)} placeholder="24h left" />
+              </div>
+            </>
+          )}
+          <div className="modal-grid" style={{gridTemplateColumns:"1fr"}}>
+            <label className="small">Photo URL (optional)</label>
+            <input className="input" value={img} onChange={e=>setImg(e.target.value)} placeholder="https://…" />
+          </div>
+        </div>
+
+        <div className="mt-16" />
+        <div style={{display:"flex",gap:10, justifyContent:"flex-end"}}>
+          <button className="btn" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary" onClick={submit}>Publish</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** ---------------------------
  *  Footer
  * --------------------------*/
 function Footer(){
@@ -351,6 +456,8 @@ function Footer(){
 export default function App(){
   const [route, nav] = useRoute();
   const auth = useAuth();
+  const {items, add} = useItems();
+  const [showNew, setShowNew] = useState(false);
 
   return (
     <>
@@ -359,10 +466,11 @@ export default function App(){
         onExplore={()=>nav("explore")}
         onAuth={()=>nav("auth")}
         onLogout={auth.logout}
+        onNew={()=>auth.user ? setShowNew(true) : nav("auth")}
       />
 
       {route==="home"    && <Home onSignIn={()=>nav("auth")} onExplore={()=>nav("explore")} />}
-      {route==="explore" && <Explore />}
+      {route==="explore" && <Explore items={items} />}
       {route==="auth"    && <Auth onClose={()=>nav("home")} auth={auth} />}
       {route==="terms"   && <TermsPage />}
       {route==="privacy" && <PrivacyPage />}
@@ -372,6 +480,14 @@ export default function App(){
       </div>
 
       <Footer />
+
+      {showNew && auth.user && (
+        <NewListingModal
+          seller={auth.user.email.replace(/(.{2}).+(@.*)/, (m, a, b) => a+"***"+b)}
+          onClose={()=>setShowNew(false)}
+          onCreate={add}
+        />
+      )}
     </>
   );
 }
