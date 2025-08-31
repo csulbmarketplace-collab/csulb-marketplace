@@ -40,7 +40,7 @@ function AuthGate({ onLogin, onBack }: { onLogin:(u:any)=>void, onBack:()=>void 
 
   return (
     <div className="container">
-      {/* 🔙 Back to home button */}
+      {/* ✅ Back to Home button */}
       <button onClick={onBack} className="btn" style={{marginBottom:"1rem", width:"auto"}}>
         ← Back to Home
       </button>
