@@ -1,101 +1,161 @@
-/* ===== CSULB Marketplace – modern theme ===== */
+```css
 :root{
-  --bg:#f6f7fb;           /* page background */
-  --surface:#ffffff;      /* cards / navbar */
-  --text:#0b1220;         /* primary text */
-  --muted:#667085;        /* secondary text */
-  --border:#e6e8ee;       /* borders */
-  --ring:#d9c06c;         /* focus outline */
-  --accent:#caa24a;       /* gold accent */
-  --accent-600:#a8862e;   /* gold hover */
+  --gold:#d4af37;
+  --gold-dark:#b7952f;
+  --navy:#111827;
+  --white:#ffffff;
+  --muted:#6b7280;
+  --border:#e5e7eb;
 }
-
-*{box-sizing:border-box}
-html,body,#root{height:100%}
 body{
   margin:0;
-  font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Inter,Roboto,Arial,sans-serif;
-  background:var(--bg);
-  color:var(--text);
+  font-family:system-ui, sans-serif;
+  background:var(--navy);
+  color:var(--white);
+  min-height:100vh;
+  display:flex;
+  justify-content:center;
+  align-items:center;
 }
 
-/* Layout helpers */
-.container{max-width:1120px;margin:0 auto;padding:0 20px}
-.row-between{display:flex;align-items:center;justify-content:space-between;gap:16px}
-
-/* Topbar */
-.topbar{
-  position:sticky;top:0;z-index:20;
-  background:var(--surface);
-  border-bottom:1px solid var(--border);
-  backdrop-filter:saturate(180%) blur(6px);
-}
-.brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:18px;color:var(--text);background:none;border:0;cursor:pointer}
-.brand-logo{
-  width:34px;height:34px;border-radius:10px;
-  display:grid;place-items:center;
-  color:#111;
-  background:linear-gradient(135deg,var(--accent) 0%, var(--accent-600) 100%);
-  border:1px solid #e9d7a5;
+.container{
+  max-width:800px;
+  width:100%;
+  padding:4rem 3rem;
+  background:var(--white);
+  color:var(--navy);
+  border-radius:1rem;
+  box-shadow:0 8px 20px rgba(0,0,0,0.25);
+  text-align:center;
+  margin:2rem;
 }
 
-/* Search (market) */
-.searchbar{display:flex;gap:8px}
-.searchbar input,.searchbar select{
-  padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:#fff;min-width:220px
+.h1{
+  font-size:2.5rem;
+  font-weight:700;
+  margin-bottom:1.5rem;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:.75rem;
+}
+.h1 span.logo{font-size:2rem;}
+
+.lead{
+  color:var(--muted);
+  margin-bottom:3rem;
+  line-height:1.6;
+  font-size:1.15rem;
 }
 
-/* Buttons */
-.btn,.btn-primary{
-  border-radius:12px;padding:10px 16px;font-weight:600;border:1px solid var(--border);cursor:pointer;
+input{
+  width:100%;
+  padding:1rem;
+  margin-top:1rem;
+  border-radius:.5rem;
+  border:1px solid var(--border);
+  font-size:1rem;
 }
-.btn{background:#fff;color:var(--text)}
-.btn:hover{background:#f3f4f6}
-.btn-primary{background:var(--accent);color:#111;border-color:#00000014}
-.btn-primary:hover{background:var(--accent-600)}
-.btn-block{width:100%}
 
-/* Hero (home) */
-.hero{
-  background:radial-gradient(1200px 600px at 50% -10%, #fff 20%, #f2f4f8 60%, #eaedf4 100%);
-  border-bottom:1px solid var(--border);
+.btn-primary{
+  background:var(--gold);
+  color:var(--navy);
+  font-weight:600;
+  border:none;
+  padding:1rem;
+  margin-top:1.25rem;
+  border-radius:.5rem;
+  width:100%;
+  cursor:pointer;
+  transition:all .2s;
 }
-.hero-wrap{padding:56px 0 28px}
-.h1{font-size: clamp(28px, 5vw, 40px); line-height:1.1; margin:0;font-weight:900; letter-spacing:-0.02em;}
-.lead{margin-top:12px;color:var(--muted);font-size:16px}
-.hero-actions{margin-top:22px;display:flex;gap:12px;flex-wrap:wrap}
-.wide-sm{width:100%}
-@media(min-width:640px){ .wide-sm{width:auto} }
+.btn-primary:hover{background:var(--gold-dark);}
 
-/* Auth card (vertical) */
-.auth-wrap{display:grid;place-items:center;padding:40px 0}
-.auth-card{
-  width:100%;max-width:420px;background:var(--surface);
-  border:1px solid var(--border);border-radius:16px;
-  padding:22px; box-shadow:0 10px 30px rgba(16,24,40,.06);
+.btn{
+  background:transparent;
+  color:var(--navy);
+  border:1px solid var(--border);
+  padding:1rem;
+  margin-top:1rem;
+  border-radius:.5rem;
+  width:100%;
+  cursor:pointer;
 }
-.auth-tabs{display:flex; gap:8px; background:#f6f7fb; border:1px solid var(--border);
-  border-radius:12px; padding:4px; margin-bottom:12px;}
-.auth-tab{flex:1; padding:10px 12px; border-radius:10px; border:none; background:transparent;
-  font-weight:700; color:var(--muted); cursor:pointer;}
-.auth-tab.on{background:#fff; color:#111; box-shadow:0 1px 2px rgba(16,24,40,.06);}
-.input{width:100%;padding:12px 14px;border:1px solid var(--border);border-radius:12px;background:#fff}
-.input:focus{outline:3px solid var(--ring);outline-offset:1px}
-.stack{display:grid;gap:12px}
 
-/* Market */
-.tabs{display:flex;gap:8px;margin:18px 0}
-.tab{border:1px solid var(--border);padding:10px 16px;border-radius:999px;background:#fff;color:var(--text);cursor:pointer}
-.tab-on{background:var(--accent);color:#111}
-.banner{margin:18px 0;padding:12px;border-radius:14px;background:linear-gradient(90deg,var(--accent), #141414);color:#111;border:1px solid #e9d7a5}
-.grid-cards{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
-.card{border:1px solid var(--border);border-radius:16px;background:#fff;overflow:hidden}
-.card-body{padding:16px}
-.title{font-weight:700}
+.footer-note{
+  margin-top:4rem;
+  font-size:.95rem;
+  color:var(--muted);
+}
+.feedback{color:var(--gold);font-weight:600;margin-top:.5rem;}
+```
 
-/* Footer note */
-.footer-note{text-align:center;margin:28px 0 8px 0;padding-top:12px;border-top:1px solid var(--border)}
-.feedback{font-weight:700;color:var(--accent)}
-.muted{color:var(--muted)}
-.pt-24{padding-top:24px}.pb-24{padding-bottom:24px}
-.empty{padding:32px;text-align:center;color:var(--muted)}
+```tsx
+import React, { useState } from "react";
+
+function HomeLanding({ onSignIn, onExplore }: any) {
+  return (
+    <main className="container">
+      <h1 className="h1"><span className="logo">🏠</span> CSULB Marketplace</h1>
+      <p className="lead">Buy & sell on campus — auctions and fixed-price listings with verified <strong>@csulb.edu</strong> accounts.</p>
+      <button className="btn-primary" onClick={onSignIn}>Sign in</button>
+      <button className="btn" onClick={onExplore}>Explore marketplace</button>
+      <div className="footer-note">
+        🚧 Work in progress — launching soon.
+        <div className="feedback">Feedback: csulbmarketplace@gmail.com</div>
+      </div>
+    </main>
+  );
+}
+
+function AuthGate({ onLogin }: { onLogin:(u:any)=>void }){
+  const [isRegister, setIsRegister] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [accounts, setAccounts] = useState<{[k:string]:string}>({});
+  const [error, setError] = useState("");
+
+  function handleSubmit(){
+    if(isRegister){
+      if(accounts[email]){ setError("Account already exists"); return; }
+      setAccounts({...accounts, [email]:password});
+      onLogin({email});
+    } else {
+      if(accounts[email] && accounts[email]===password){
+        onLogin({email});
+      } else {
+        setError("Invalid credentials");
+      }
+    }
+  }
+
+  return (
+    <div className="container">
+      <h2 className="h1">{isRegister ? "Create Account" : "Log In"}</h2>
+      <input value={email} onChange={(e)=>setEmail(e.target.value)} placeholder="you@student.csulb.edu" />
+      <input type="password" value={password} onChange={(e)=>setPassword(e.target.value)} placeholder="Password" />
+      {error && <div style={{color:"red", marginTop:".5rem"}}>{error}</div>}
+      <button onClick={handleSubmit} className="btn-primary">{isRegister ? "Register" : "Continue"}</button>
+      <button className="btn" onClick={()=>setIsRegister(!isRegister)}>
+        {isRegister ? "Already have an account? Log in" : "Create a new account"}
+      </button>
+    </div>
+  );
+}
+
+export default function App(){
+  const [user, setUser] = useState<any>(null);
+  const [mode, setMode] = useState<"home"|"auth">("home");
+
+  return mode === "home" && !user ? (
+    <HomeLanding onSignIn={()=>setMode("auth")} onExplore={()=>alert("Browse as guest (demo)")} />
+  ) : !user ? (
+    <AuthGate onLogin={(u)=>setUser(u)} />
+  ) : (
+    <div className="container">
+      <h2 className="h1">Welcome, {user.email}</h2>
+      <p>You are now logged in! 🎉</p>
+    </div>
+  );
+}
+```
