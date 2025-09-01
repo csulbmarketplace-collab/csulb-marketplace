@@ -27,7 +27,7 @@ type Item = {
   endsAt?: number;
   sellerMasked?: string;
   images?: string[];
-  image?: string; // legacy
+  sold?: boolean;
   housing?: {
     rent: number; kind: HousingKind; bath: BathKind; roommate: RoommateIntent; link?: string;
   };
@@ -52,10 +52,7 @@ function maskEmail(e?: string) {
   const [u, d] = e.split("@");
   return (u.slice(0, 2) + "***@" + d) as string;
 }
-function formatCurrency(n?: number) {
-  if (n == null) return "-";
-  return `$${n.toFixed(2)}`;
-}
+function formatCurrency(n?: number) { return n == null ? "-" : `$${n.toFixed(2)}`; }
 function timeLeft(ms?: number) {
   if (!ms) return "-";
   const left = ms - Date.now();
@@ -82,7 +79,7 @@ const initialItems: Item[] = [
     type: "auction",
     currentBid: 18,
     endsAt: Date.now() + 1000 * 60 * 60 * 26,
-    image: "https://images.unsplash.com/photo-1519681393784-d120267933ba?q=80&w=1200&auto=format&fit=crop",
+    images: ["https://images.unsplash.com/photo-1519681393784-d120267933ba?q=80&w=1200&auto=format&fit=crop"],
     sellerMasked: "se***@student.csulb.edu",
   },
   {
@@ -91,7 +88,7 @@ const initialItems: Item[] = [
     category: "Dorm & Furniture",
     type: "buy",
     price: 70,
-    image: "",
+    images: ["https://images.unsplash.com/photo-1519710880211-3d7703f3e4a2?q=80&w=1200&auto=format&fit=crop"],
     sellerMasked: "by***@student.csulb.edu",
   },
   {
@@ -101,7 +98,7 @@ const initialItems: Item[] = [
     type: "auction",
     currentBid: 110,
     endsAt: Date.now() + 1000 * 60 * 60 * 5.5,
-    image: "",
+    images: ["https://images.unsplash.com/photo-1549921296-3a6b3b5b3e46?q=80&w=1200&auto=format&fit=crop"],
     sellerMasked: "se***@student.csulb.edu",
   },
 ];
@@ -111,17 +108,11 @@ export default function App() {
   const [items, setItems] = useState<Item[]>(() => {
     const fromLS = localStorage.getItem(LS_ITEMS);
     const parsed: Item[] = fromLS ? JSON.parse(fromLS) : initialItems;
-    return parsed.map(i => {
-      if (!i.images && i.image) return {...i, images: i.image ? [i.image] : []};
-      if (!i.images) return {...i, images: []};
-      return i;
-    });
+    return parsed.map(i => ({...i, images: i.images ?? []}));
   });
 
   const [activeTab, setActiveTab] = useState<"home"|"explore"|"auth">("home");
   const [showModal, setShowModal] = useState(false);
-
-  // auth state
   const [session, setSession] = useState<string | null>(() => localStorage.getItem(LS_SESSION));
 
   // filters
@@ -140,13 +131,10 @@ export default function App() {
   const filtered = useMemo(() => {
     let list = [...items];
     if (categoryFilter !== "All") list = list.filter(i => i.category === categoryFilter);
-
     const min = minPrice ? Number(minPrice) : undefined;
     const max = maxPrice ? Number(maxPrice) : undefined;
-
     if (min != null) list = list.filter(i => (i.type==="buy" ? (i.price ?? Infinity) >= min : (i.currentBid ?? Infinity) >= min));
     if (max != null) list = list.filter(i => (i.type==="buy" ? (i.price ?? -Infinity) <= max : (i.currentBid ?? -Infinity) <= max));
-
     if (categoryFilter === "Housing") {
       list = list.filter(i => i.category === "Housing");
       if (housingKind !== "Any") list = list.filter(i => i.housing?.kind === housingKind);
@@ -156,26 +144,26 @@ export default function App() {
     return list;
   }, [items, categoryFilter, minPrice, maxPrice, housingKind, bathKind, roommateIntent]);
 
-  function logout() {
-    localStorage.removeItem(LS_SESSION);
-    setSession(null);
-  }
+  function logout() { localStorage.removeItem(LS_SESSION); setSession(null); }
+
+  // Gate explore if not logged in
+  const goExplore = () => { session ? setActiveTab("explore") : setActiveTab("auth"); };
 
   return (
     <>
       <Topbar
         loggedInEmail={session || undefined}
         onGoHome={() => setActiveTab("home")}
-        onExplore={() => setActiveTab("explore")}
+        onExplore={goExplore}
         onSign={() => setActiveTab("auth")}
         onLogout={logout}
       />
 
       {activeTab === "home" && (
-        <Home heroAction={() => setActiveTab("auth")} explore={() => setActiveTab("explore")} />
+        <Home heroAction={() => setActiveTab("auth")} explore={goExplore} />
       )}
 
-      {activeTab === "explore" && (
+      {activeTab === "explore" && session && (
         <div className="container section">
           <div style={{display:"flex", alignItems:"center", gap:12, marginBottom:16}}>
             <button className="pill" onClick={() => setActiveTab("home")}>← Home</button>
@@ -196,7 +184,26 @@ export default function App() {
           />
 
           <div className="row cards">
-            {filtered.map(item => <Card key={item.id} item={item} />)}
+            {filtered.map(item => (
+              <Card
+                key={item.id}
+                item={item}
+                onBid={(amount) => {
+                  setItems(prev => {
+                    const next = prev.map(it => it.id===item.id ? {...it, currentBid: amount} : it);
+                    localStorage.setItem(LS_ITEMS, JSON.stringify(next));
+                    return next;
+                  });
+                }}
+                onBuy={()=>{
+                  setItems(prev => {
+                    const next = prev.map(it => it.id===item.id ? {...it, sold:true} : it);
+                    localStorage.setItem(LS_ITEMS, JSON.stringify(next));
+                    return next;
+                  });
+                }}
+              />
+            ))}
             {filtered.length === 0 && (
               <div className="glass" style={{padding:18, gridColumn:"1/-1", textAlign:"center", color:"var(--muted)"}}>
                 Nothing here yet. Try widening your filters.
@@ -265,7 +272,7 @@ function Home({ heroAction, explore }: { heroAction: ()=>void; explore:()=>void 
     <div className="container section">
       <div className="glass hero">
         <h1 className="h1">Buy & sell on campus — safely, fast, and student-only</h1>
-        <p className="lead">Auctions and buy-now listings, verified with <strong>@csulb.edu</strong>.</p>
+        <p className="lead">Auctions and buy-now listings, verified with <strong>@student.csulb.edu</strong>.</p>
         <div style={{display:"flex", gap:10, flexWrap:"wrap"}}>
           <button className="btn-primary" onClick={heroAction}>Sign in</button>
           <button className="btn" onClick={explore}>Explore marketplace</button>
@@ -342,15 +349,39 @@ function Filters(props: {
   );
 }
 
-/* ------------------ Cards ------------------ */
-function Card({ item }: { item: Item }) {
+/* ------------------ Cards (carousel + bid/buy) ------------------ */
+function Card({
+  item, onBid, onBuy
+}:{ item: Item; onBid:(amount:number)=>void; onBuy:()=>void }) {
   const isAuction = item.type === "auction";
-  const first = item.images && item.images.length > 0 ? item.images[0] : undefined;
+  const [idx, setIdx] = useState(0);
+  const imgs = item.images ?? [];
+  const cur = imgs[idx];
+
+  // simple swipe
+  let startX = 0;
+  function onTouchStart(e: React.TouchEvent){ startX = e.touches[0].clientX; }
+  function onTouchEnd(e: React.TouchEvent){
+    const dx = e.changedTouches[0].clientX - startX;
+    if (Math.abs(dx) > 40) setIdx(i => dx<0 ? Math.min(i+1, imgs.length-1) : Math.max(i-1,0));
+  }
+
+  const ended = isAuction && (!!item.endsAt && Date.now() > item.endsAt);
+  const canBid = isAuction && !ended && !item.sold;
+  const canBuy = item.type==="buy" && !item.sold;
+
   return (
     <div className="card">
-      <div className="card-media">
-        {first ? <img src={first} alt="" style={{width:"100%", height:"100%", objectFit:"cover"}}/> : <div>No photo</div>}
-        {item.images && item.images.length > 1 && <div className="badge-photos">{item.images.length} photos</div>}
+      {item.sold && <div className="sold-ribbon">SOLD</div>}
+      <div className="card-media" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+        {cur ? <img src={cur} alt="" /> : <div style={{display:"grid",placeItems:"center",height:"100%",color:"#7c8ac2"}}>No photo</div>}
+        {imgs.length>1 && (
+          <>
+            <button className="nav-btn left"  onClick={()=>setIdx(i=>Math.max(0,i-1))}>‹</button>
+            <button className="nav-btn right" onClick={()=>setIdx(i=>Math.min(imgs.length-1,i+1))}>›</button>
+            <div className="badge-photos">{idx+1}/{imgs.length}</div>
+          </>
+        )}
       </div>
       <div className="card-body">
         <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", gap:8}}>
@@ -366,15 +397,35 @@ function Card({ item }: { item: Item }) {
             <strong>Rent:</strong> {formatCurrency(item.housing.rent)} · <strong>{item.housing.kind}</strong> · {item.housing.bath} · {item.housing.roommate}
           </div>
         )}
+        {!isAuction && item.price!=null && <div style={{marginTop:8}}><strong>{formatCurrency(item.price)}</strong></div>}
+        {isAuction && <div style={{marginTop:8}}><strong>Current bid:</strong> {formatCurrency(item.currentBid)}</div>}
       </div>
       <div className="cta-bar">
-        {isAuction ? <button className="btn" style={{flex:1}}>Place bid</button> : <button className="btn-primary" style={{flex:1}}>Buy now</button>}
+        {isAuction ? (
+          <button className="btn" style={{flex:1}} disabled={!canBid}
+            onClick={()=>{
+              const input = prompt("Enter your bid (USD)");
+              if (!input) return;
+              const amt = Number(input);
+              if (Number.isNaN(amt) || amt <= (item.currentBid ?? 0)) { alert("Bid must be higher than current bid."); return; }
+              onBid(amt);
+            }}>
+            Place bid
+          </button>
+        ) : (
+          <button className="btn-primary" style={{flex:1}} disabled={!canBuy}
+            onClick={()=>{
+              if (confirm("Buy this item now?")) onBuy();
+            }}>
+            Buy now
+          </button>
+        )}
       </div>
     </div>
   );
 }
 
-/* ------------------ Auth Screen (starry) ------------------ */
+/* ------------------ Auth Screen ------------------ */
 
 function readAccounts(): Account[] {
   const s = localStorage.getItem(LS_ACCOUNTS);
@@ -383,7 +434,8 @@ function readAccounts(): Account[] {
 function saveAccounts(list: Account[]) {
   localStorage.setItem(LS_ACCOUNTS, JSON.stringify(list));
 }
-function emailOk(e: string){ return /@csulb\.edu$/i.test(e.trim()); }
+/* Require @student.csulb.edu */
+function emailOk(e: string){ return /@student\.csulb\.edu$/i.test(e.trim()); }
 
 function AuthScreen({ onBack, onSignedIn }:{ onBack:()=>void; onSignedIn:(email:string)=>void }) {
   const [tab, setTab] = useState<"login"|"register">("login");
@@ -396,15 +448,15 @@ function AuthScreen({ onBack, onSignedIn }:{ onBack:()=>void; onSignedIn:(email:
     setErr("");
     const list = readAccounts();
     const acc = list.find(a => a.email.toLowerCase() === email.toLowerCase());
-    if (!emailOk(email)) { setErr("Use your @csulb.edu email."); return; }
+    if (!emailOk(email)) { setErr("Use your @student.csulb.edu email."); return; }
     if (!acc || acc.password !== pw) { setErr("Invalid email or password."); return; }
     onSignedIn(acc.email);
-    if (!remember) { /* demo: nothing */ }
+    if (!remember) { /* demo only */ }
   }
 
   function register() {
     setErr("");
-    if (!emailOk(email)) { setErr("Use your @csulb.edu email."); return; }
+    if (!emailOk(email)) { setErr("Use your @student.csulb.edu email."); return; }
     if (pw.length < 6) { setErr("Password must be at least 6 characters."); return; }
     const list = readAccounts();
     if (list.some(a => a.email.toLowerCase() === email.toLowerCase())) { setErr("Account already exists."); return; }
@@ -502,7 +554,7 @@ function NewListingModal({
   const titleOk = title.trim().length >= 3;
   const hasPhoto = images.length >= 1;
   const priceOk = !isHousing && !isAuction ? Number(price) > 0 : true;
-  const bidOk = !isHousing && isAuction ? Number(startingBid) >= 0 && durationHours >= 1 : true;
+  const bidOk = !isHousing && isAuction ? Number(startingBid) > 0 && durationHours >= 1 : true;
   const rentOk = isHousing ? Number(rent) > 0 : true;
   const canPublish = titleOk && hasPhoto && priceOk && bidOk && rentOk;
 
@@ -519,13 +571,13 @@ function NewListingModal({
       type: isHousing ? "buy" : type, sellerMasked: seller, images
     };
     if (!isHousing && isAuction) {
-      base.currentBid = Number(startingBid || 0);
+      base.currentBid = Number(startingBid);
       base.endsAt = Date.now() + durationHours * 60 * 60 * 1000;
     } else if (!isHousing && !isAuction) {
-      base.price = Number(price || 0);
+      base.price = Number(price);
     }
     if (isHousing) {
-      const rentNum = Number(rent || 0);
+      const rentNum = Number(rent);
       base.price = rentNum;
       base.housing = { rent: rentNum, kind: hKind, bath: hBath, roommate: hRoommate, link: hLink || undefined };
     }
@@ -573,7 +625,7 @@ function NewListingModal({
             {isAuction ? (
               <>
                 <div>
-                  <label>Starting bid (USD)</label>
+                  <label>Starting bid (USD) *</label>
                   <input className="input" inputMode="numeric" value={startingBid} onChange={e=>setStartingBid(e.target.value)} />
                 </div>
                 <div>
@@ -643,7 +695,6 @@ function NewListingModal({
                 type="file"
                 accept="image/*"
                 multiple
-                /* IMPORTANT: no 'capture' attribute -> opens gallery on phones */
                 className="file-input"
                 onChange={(e)=>onFilesSelected(e.target.files)}
                 style={{display:"none"}}
